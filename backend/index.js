@@ -1,6 +1,5 @@
 // BotHost: отключаем проверку SSL
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -30,9 +29,16 @@ if (!BOT_TOKEN) {
     process.exit(1);
 }
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// Middleware с правильными CORS настройками
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Telegram-Init-Data'],
+    credentials: true
+}));
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 // ===== ПОДКЛЮЧЕНИЕ К БД (БЕЗ SSL для BotHost) =====
@@ -41,8 +47,7 @@ let pool;
 function createPool() {
     if (process.env.DATABASE_URL) {
         console.log('🗄️ Использую DATABASE_URL');
-        return new Pool({ 
-            connectionString: process.env.DATABASE_URL,
+        return new Pool({            connectionString: process.env.DATABASE_URL,
             ssl: false,
             connectionTimeoutMillis: 15000,
             max: 10
@@ -91,8 +96,7 @@ async function initDB() {
                 is_active BOOLEAN DEFAULT TRUE,
                 plan_type VARCHAR(10) DEFAULT 'PRO',
                 payment_receipt_id TEXT
-            )`,
-            `CREATE TABLE IF NOT EXISTS payments (
+            )`,            `CREATE TABLE IF NOT EXISTS payments (
                 id SERIAL PRIMARY KEY,
                 user_id BIGINT REFERENCES users(tg_id),
                 amount INTEGER NOT NULL,
@@ -139,11 +143,9 @@ const bot = new Telegraf(BOT_TOKEN);
 // ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
 async function createUser(tgId, username, firstName) {
     await pool.query(
-        `INSERT INTO users (tg_id, username, first_name, free_recipes_used) 
-         VALUES ($1, $2, $3, 0) ON CONFLICT (tg_id) DO NOTHING`,
+        `INSERT INTO users (tg_id, username, first_name, free_recipes_used) VALUES ($1, $2, $3, 0) ON CONFLICT (tg_id) DO NOTHING`,
         [tgId, username, firstName]
-    );
-}
+    );}
 
 async function getUser(tgId) {
     const { rows } = await pool.query(`SELECT * FROM users WHERE tg_id = $1`, [tgId]);
@@ -173,19 +175,18 @@ async function hasSubscription(tgId) {
 
 function parseSteps(fullText) {
     if (!fullText) return ['Текст рецепта не получен.'];
-    const stepRegex = /(?:Шаг\s*\d+[\.:\s\-]*)|(?:^\d+\.\s)/gim;
+    const stepRegex = /(?:Шаг\s*\d+[.:\s-])|(?:^\d+.\s)/gim;
     const parts = fullText.split(stepRegex).filter(p => p.trim().length > 5);
     if (parts.length >= 2) return parts.map(p => p.trim());
-    return fullText.split(/\n\s*\n/).filter(p => p.trim().length > 10);
+    return fullText.split(/\n\s\n/).filter(p => p.trim().length > 10);
 }
 
 function cleanHtml(text) {
     if (!text) return '';
     let safe = text
-        .replace(/```html/gi, '')
-        .replace(/```/g, '')
+        .replace(/`html/gi, '').replace(/`/g, '')
         .replace(/<[^>]+>/g, '')
-        .replace(/\*\*/g, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/&nbsp;/g, ' ')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
@@ -193,8 +194,7 @@ function cleanHtml(text) {
 }
 
 function detectRequestType(text) {
-    const lower = text.toLowerCase();
-    const keywords = ['рецепт', 'приготовь', 'хочу', 'сделай', 'как сделать', 'борщ', 'салат', 'суп', 'паста', 'карбонара', 'омлет', 'плов', 'котлеты', 'торт', 'десерт'];
+    const lower = text.toLowerCase();    const keywords = ['рецепт', 'приготовь', 'хочу', 'сделай', 'как сделать', 'борщ', 'салат', 'суп', 'паста', 'карбонара', 'омлет', 'плов', 'котлеты', 'торт', 'десерт'];
     if (keywords.some(k => lower.includes(k))) return 'dish';
     if (text.includes(',')) return 'ingredients';
     return 'dish';
@@ -202,10 +202,7 @@ function detectRequestType(text) {
 
 function buildPrompt(requestType, ingredients, details, planType) {
     const isVIP = planType === 'VIP';
-    const system = `Ты элитный ИИ Шеф-Повар. Создавай подробные рецепты.
-Структура: 🍽 Название, 📝 Описание, 🥄 Ингредиенты, ⏱ Время, 🔥 Метод, 👨‍🍳 Шаги, ✨ Советы.
-${isVIP ? 'Добавь 📊 КБЖУ.' : ''}
-Правила: используй только эмодзи для структуры.`;
+    const system = `Ты элитный ИИ Шеф-Повар. Создавай подробные рецепты. Структура: 🍽 Название, 📝 Описание,  Ингредиенты,  Время, 🔥 Метод, 👨‍ Шаги,  Советы. ${isVIP ? 'Добавь 📊 КБЖУ.' : ''} Правила: используй только эмодзи для структуры.`;
     if (requestType === 'ingredients') {
         return { system, user: `Блюдо ТОЛЬКО из: ${ingredients}\nДоп: ${details || 'нет'}` };
     }
@@ -246,11 +243,10 @@ app.get('/api/user/:tgId', async (req, res) => {
 // Generate recipe
 app.post('/api/generate', async (req, res) => {
     const { tgId, query, details, planType } = req.body;
-    
-    if (!query || !tgId) {
+        if (!query || !tgId) {
         return res.status(400).json({ success: false, error: 'Missing parameters' });
     }
-    
+
     try {
         await createUser(tgId, null, null);
         
@@ -285,19 +281,18 @@ app.post('/api/generate', async (req, res) => {
         
         // Извлекаем описание
         let description = '';
-        const descMatch = recipeText.match(/📝\s*([^\n]+(?:\n[^🍽🥄⏱🔥✨📊]+)*)/);
+        const descMatch = recipeText.match(/📝\s*([^\n]+(?:\n[^🍽🥄🔥✨]+)*)/);
         if (descMatch) description = descMatch[1].trim();
         
         // Извлекаем ингредиенты
         let ingredients = [];
-        const ingredientsMatch = recipeText.match(/🥄\s*([^\n]+(?:\n[^🍽📝⏱🔥✨📊]+)*)/);
+        const ingredientsMatch = recipeText.match(/🥄\s*([^\n]+(?:\n[^🍽📝⏱🔥✨]+)*)/);
         if (ingredientsMatch) {
             ingredients = ingredientsMatch[1]
                 .split('\n')
                 .filter(l => l.trim())
                 .map(l => l.replace(/^[•\-*\d.]\s*/, '').trim());
-        }
-        
+        }        
         // Извлекаем время
         let time = '30 минут';
         const timeMatch = recipeText.match(/⏱\s*([^\n]+)/);
@@ -305,13 +300,13 @@ app.post('/api/generate', async (req, res) => {
         
         // Извлекаем советы
         let tips = '';
-        const tipsMatch = recipeText.match(/✨\s*([^\n]+(?:\n[^🍽📝🥄⏱🔥📊]+)*)/);
+        const tipsMatch = recipeText.match(/✨\s*([^\n]+(?:\n[^🍽📝⏱🔥]+)*)/);
         if (tipsMatch) tips = tipsMatch[1].trim();
         
         // Извлекаем КБЖУ для VIP
         let nutrition = null;
         if (isVIP) {
-            const nutritionMatch = recipeText.match(/📊\s*([^\n]+(?:\n[^🍽📝🥄⏱🔥✨]+)*)/);
+            const nutritionMatch = recipeText.match(/📊\s*([^\n]+(?:\n[^🍽📝⏱🔥✨]+)*)/);
             if (nutritionMatch) {
                 nutrition = { text: nutritionMatch[1].trim() };
             }
@@ -346,8 +341,7 @@ app.post('/api/generate', async (req, res) => {
 });
 
 // Create payment
-app.post('/api/create-payment', async (req, res) => {
-    const { tgId, planType, amount } = req.body;
+app.post('/api/create-payment', async (req, res) => {    const { tgId, planType, amount } = req.body;
     
     try {
         const result = await pool.query(
@@ -375,7 +369,7 @@ app.post('/api/upload-receipt', upload.single('receipt'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ success: false, error: 'No file uploaded' });
     }
-    
+
     try {
         const fileId = `receipt_${Date.now()}_${tgId}`;
         
@@ -396,8 +390,7 @@ app.post('/api/upload-receipt', upload.single('receipt'), async (req, res) => {
                 ]
             };
             
-            try {
-                await bot.telegram.sendMessage(ADMIN_ID, caption, {
+            try {                await bot.telegram.sendMessage(ADMIN_ID, caption, {
                     reply_markup: keyboard
                 });
             } catch (e) {
@@ -446,8 +439,7 @@ app.get('/api/payments/:tgId', async (req, res) => {
     const { tgId } = req.params;
     try {
         const { rows } = await pool.query(
-            `SELECT * FROM payments WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10`,
-            [tgId]
+            `SELECT * FROM payments WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10`,            [tgId]
         );
         res.json({ success: true, payments: rows });
     } catch (error) {
@@ -462,8 +454,8 @@ app.get('/', (req, res) => {
 
 // Health check
 app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'ok', 
+    res.json({
+        status: 'ok',
         timestamp: new Date(),
         bot: BOT_TOKEN ? 'configured' : 'missing',
         admin: ADMIN_ID || 'not set'
@@ -475,13 +467,12 @@ function setupCron() {
     cron.schedule('0 10 * * *', async () => {
         console.log('⏰ [CRON] Проверка подписок...');
         try {
-            const { rows } = await pool.query(`
-                SELECT u.tg_id, s.expires_at, s.plan_type, u.first_name
-                FROM subscriptions s 
-                JOIN users u ON s.user_id = u.tg_id 
-                WHERE s.is_active = TRUE 
-                AND s.expires_at BETWEEN NOW() AND NOW() + INTERVAL '3 days'
-            `);
+            const { rows } = await pool.query(
+                `SELECT u.tg_id, s.expires_at, s.plan_type, u.first_name 
+                 FROM subscriptions s 
+                 JOIN users u ON s.user_id = u.tg_id 
+                 WHERE s.is_active = TRUE AND s.expires_at BETWEEN NOW() AND NOW() + INTERVAL '3 days'`
+            );
             
             for (const sub of rows) {
                 const days = Math.ceil((new Date(sub.expires_at) - new Date()) / 86400000);
@@ -496,14 +487,15 @@ function setupCron() {
                 }
             }
             
-            const { rowCount } = await pool.query(`UPDATE subscriptions SET is_active = FALSE WHERE expires_at < NOW()`);
+            const { rowCount } = await pool.query(
+                `UPDATE subscriptions SET is_active = FALSE WHERE expires_at < NOW()`            );
             if (rowCount > 0) console.log(`✅ Деактивировано ${rowCount} просроченных подписок`);
             
         } catch (e) { 
             console.error('CRON error:', e.message); 
         }
     }, { timezone: 'Europe/Moscow' });
-    
+
     cron.schedule('0 3 */3 * *', async () => {
         console.log('⏰ [CRON] Очистка старых платежей...');
         try {
@@ -527,13 +519,13 @@ function getDaysWord(days) {
 bot.start(async (ctx) => {
     if (ctx.from.id === ADMIN_ID) {
         try {
-            const { rows: stats } = await pool.query(`
-                SELECT 
-                    (SELECT COUNT(*) FROM users) as users,
-                    (SELECT COUNT(*) FROM subscriptions WHERE is_active = TRUE) as subs,
-                    (SELECT COUNT(*) FROM payments WHERE status = 'pending') as pending,
-                    (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'approved') as revenue
-            `);
+            const { rows: stats } = await pool.query(
+                `SELECT 
+                    (SELECT COUNT(*) FROM users) as users, 
+                    (SELECT COUNT(*) FROM subscriptions WHERE is_active = TRUE) as subs, 
+                    (SELECT COUNT(*) FROM payments WHERE status = 'pending') as pending, 
+                    (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'approved') as revenue`
+            );
             
             const msg = `👨‍🍳 <b>Панель администратора</b>\n\n` +
                 `📊 <b>Статистика:</b>\n` +
@@ -545,8 +537,7 @@ bot.start(async (ctx) => {
             await ctx.reply(msg, { 
                 parse_mode: 'HTML',
                 reply_markup: {
-                    keyboard: [
-                        ['📋 Ожидающие оплаты', '📥 Экспорт подписок'],
+                    keyboard: [                        ['📋 Ожидающие оплаты', '📥 Экспорт подписок'],
                         ['📊 Статистика', 'ℹ️ Помощь']
                     ],
                     resize_keyboard: true
@@ -557,9 +548,9 @@ bot.start(async (ctx) => {
         }
         return;
     }
-    
+
     const webAppUrl = `https://bot-1779392471-6640-zahar0304.bothost.tech`;
-    
+
     await ctx.reply(
         `👨‍🍳 <b>Добро пожаловать в Шеф-Повар AI!</b>\n\n` +
         `Я помогу тебе приготовить вкусные блюда. Открой меню, чтобы начать!`,
@@ -578,13 +569,13 @@ bot.start(async (ctx) => {
 bot.hears('📋 Ожидающие оплаты', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     try {
-        const { rows } = await pool.query(`
-            SELECT p.id, u.first_name, u.username, p.amount, p.created_at, p.plan_type
-            FROM payments p 
-            JOIN users u ON p.user_id = u.tg_id 
-            WHERE p.status = 'pending' 
-            ORDER BY p.created_at DESC LIMIT 10
-        `);
+        const { rows } = await pool.query(
+            `SELECT p.id, u.first_name, u.username, p.amount, p.created_at, p.plan_type 
+             FROM payments p 
+             JOIN users u ON p.user_id = u.tg_id 
+             WHERE p.status = 'pending' 
+             ORDER BY p.created_at DESC LIMIT 10`
+        );
         
         if (rows.length === 0) {
             return ctx.reply('✅ Нет ожидающих оплат');
@@ -595,8 +586,7 @@ bot.hears('📋 Ожидающие оплаты', async (ctx) => {
             msg += `<b>#${r.id}</b> — ${r.first_name || '?'} (@${r.username || 'нет'})\n`;
             msg += `💎 ${r.plan_type} | 💰 ${r.amount}₽ | ${new Date(r.created_at).toLocaleDateString()}\n\n`;
         });
-        ctx.reply(msg, { parse_mode: 'HTML' });
-    } catch (e) { 
+        ctx.reply(msg, { parse_mode: 'HTML' });    } catch (e) { 
         ctx.reply('❌ Ошибка: ' + e.message); 
     }
 });
@@ -604,13 +594,13 @@ bot.hears('📋 Ожидающие оплаты', async (ctx) => {
 bot.hears('📊 Статистика', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     try {
-        const { rows: stats } = await pool.query(`
-            SELECT 
-                (SELECT COUNT(*) FROM users) as total,
-                (SELECT COUNT(*) FROM subscriptions WHERE is_active = TRUE) as active,
-                (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'approved') as revenue,
-                (SELECT COUNT(*) FROM users WHERE free_recipes_used > 0) as used_free
-        `);
+        const { rows: stats } = await pool.query(
+            `SELECT 
+                (SELECT COUNT(*) FROM users) as total, 
+                (SELECT COUNT(*) FROM subscriptions WHERE is_active = TRUE) as active, 
+                (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'approved') as revenue, 
+                (SELECT COUNT(*) FROM users WHERE free_recipes_used > 0) as used_free`
+        );
         
         const msg = `📊 <b>Детальная статистика:</b>\n\n` +
             `👥 Пользователей: ${stats[0].total}\n` +
@@ -627,13 +617,12 @@ bot.hears('📊 Статистика', async (ctx) => {
 bot.hears('📥 Экспорт подписок', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     try {
-        const { rows } = await pool.query(`
-            SELECT u.tg_id, u.first_name, u.username, u.created_at, 
-                   s.plan_type, s.expires_at, s.is_active
-            FROM users u
-            LEFT JOIN subscriptions s ON u.tg_id = s.user_id AND s.is_active = TRUE
-            ORDER BY u.created_at DESC
-        `);
+        const { rows } = await pool.query(
+            `SELECT u.tg_id, u.first_name, u.username, u.created_at, s.plan_type, s.expires_at, s.is_active 
+             FROM users u 
+             LEFT JOIN subscriptions s ON u.tg_id = s.user_id AND s.is_active = TRUE 
+             ORDER BY u.created_at DESC`
+        );
         
         let csv = 'ID,Имя,Username,Дата регистрации,План,До,Активна\n';
         rows.forEach(r => {
@@ -646,8 +635,7 @@ bot.hears('📥 Экспорт подписок', async (ctx) => {
     }
 });
 
-bot.hears('ℹ️ Помощь', (ctx) => {
-    if (ctx.from.id !== ADMIN_ID) return;
+bot.hears('ℹ️ Помощь', (ctx) => {    if (ctx.from.id !== ADMIN_ID) return;
     ctx.reply(
         `📚 <b>Помощь по боту</b>\n\n` +
         `• Одобрение платежей происходит вручную\n` +
@@ -696,8 +684,7 @@ bot.action(/^approve_(\d+)$/, async (ctx) => {
         
         try {
             await ctx.telegram.sendMessage(
-                payment.user_id,
-                `🎉 <b>${payment.plan_type} подписка активирована!</b>\n\n` +
+                payment.user_id,                `🎉 <b>${payment.plan_type} подписка активирована!</b>\n\n` +
                 `📅 Действует до: ${expiresAt.toLocaleDateString('ru-RU')}\n` +
                 `🍳 Готовьте с удовольствием!`,
                 { parse_mode: 'HTML' }
@@ -747,7 +734,6 @@ bot.action(/^reject_(\d+)$/, async (ctx) => {
         await ctx.answerCbQuery('❌ Ошибка', { show_alert: true }); 
     }
 });
-
 // ===== ЗАПУСК (ТОЛЬКО POLLING MODE) =====
 async function start() {
     await initDB();
@@ -760,7 +746,7 @@ async function start() {
         console.log(`🤖 Bot polling mode active`);
         console.log(`👨‍💼 Admin ID: ${ADMIN_ID}`);
     });
-    
+
     // Запускаем бота в polling mode (без вебхука)
     bot.launch();
     console.log('✅ Bot started in polling mode');
