@@ -10,6 +10,8 @@ const { Telegraf, Markup } = require('telegraf');
 const cron = require('node-cron');
 const { callGigaChat, getGigaToken } = require('./gigachat');
 const { transcribeVoice, generateVoice } = require('./voice');
+const WEBHOOK_URL =
+        'https://bot-1779392471-6640-zahar0304.bothost.tech/webhook';
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
