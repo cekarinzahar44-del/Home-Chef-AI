@@ -9,7 +9,6 @@ const { Telegraf, Markup } = require('telegraf');
 const cron = require('node-cron');
 const { callGigaChat, getGigaToken } = require('./gigachat');
 const { transcribeVoice, generateVoice } = require('./voice');
-
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -47,8 +46,8 @@ let pool;
 function createPool() {
     if (process.env.DATABASE_URL) {
         console.log('🗄️ Использую DATABASE_URL');
-        return new Pool({            connectionString: process.env.DATABASE_URL,
-            ssl: false,
+        return new Pool({
+            connectionString: process.env.DATABASE_URL,            ssl: false,
             connectionTimeoutMillis: 15000,
             max: 10
         });
@@ -96,8 +95,8 @@ async function initDB() {
                 is_active BOOLEAN DEFAULT TRUE,
                 plan_type VARCHAR(10) DEFAULT 'PRO',
                 payment_receipt_id TEXT
-            )`,            `CREATE TABLE IF NOT EXISTS payments (
-                id SERIAL PRIMARY KEY,
+            )`,
+            `CREATE TABLE IF NOT EXISTS payments (                id SERIAL PRIMARY KEY,
                 user_id BIGINT REFERENCES users(tg_id),
                 amount INTEGER NOT NULL,
                 receipt_file_id TEXT,
@@ -145,8 +144,8 @@ async function createUser(tgId, username, firstName) {
     await pool.query(
         `INSERT INTO users (tg_id, username, first_name, free_recipes_used) VALUES ($1, $2, $3, 0) ON CONFLICT (tg_id) DO NOTHING`,
         [tgId, username, firstName]
-    );}
-
+    );
+}
 async function getUser(tgId) {
     const { rows } = await pool.query(`SELECT * FROM users WHERE tg_id = $1`, [tgId]);
     return rows[0];
@@ -186,7 +185,6 @@ function cleanHtml(text) {
     let safe = text
         .replace(/`html/gi, '').replace(/`/g, '')
         .replace(/<[^>]+>/g, '')
-        .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/&nbsp;/g, ' ')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
@@ -194,15 +192,15 @@ function cleanHtml(text) {
 }
 
 function detectRequestType(text) {
-    const lower = text.toLowerCase();    const keywords = ['рецепт', 'приготовь', 'хочу', 'сделай', 'как сделать', 'борщ', 'салат', 'суп', 'паста', 'карбонара', 'омлет', 'плов', 'котлеты', 'торт', 'десерт'];
-    if (keywords.some(k => lower.includes(k))) return 'dish';
-    if (text.includes(',')) return 'ingredients';
+    const lower = text.toLowerCase();
+    const keywords = ['рецепт', 'приготовь', 'хочу', 'сделай', 'как сделать', 'борщ', 'салат', 'суп', 'паста', 'карбонара', 'омлет', 'плов', 'котлеты', 'торт', 'десерт'];
+    if (keywords.some(k => lower.includes(k))) return 'dish';    if (text.includes(',')) return 'ingredients';
     return 'dish';
 }
 
 function buildPrompt(requestType, ingredients, details, planType) {
     const isVIP = planType === 'VIP';
-    const system = `Ты элитный ИИ Шеф-Повар. Создавай подробные рецепты. Структура: 🍽 Название, 📝 Описание,  Ингредиенты,  Время, 🔥 Метод, 👨‍ Шаги,  Советы. ${isVIP ? 'Добавь 📊 КБЖУ.' : ''} Правила: используй только эмодзи для структуры.`;
+    const system = `Ты элитный ИИ Шеф-Повар. Создавай подробные рецепты. Структура: 🍽 Название, 📝 Описание, 🥄 Ингредиенты, ⏱ Время, 🔥 Метод, 👨‍🍳 Шаги, ✨ Советы. ${isVIP ? 'Добавь 📊 КБЖУ.' : ''} Правила: используй только эмодзи для структуры.`;
     if (requestType === 'ingredients') {
         return { system, user: `Блюдо ТОЛЬКО из: ${ingredients}\nДоп: ${details || 'нет'}` };
     }
@@ -243,9 +241,9 @@ app.get('/api/user/:tgId', async (req, res) => {
 // Generate recipe
 app.post('/api/generate', async (req, res) => {
     const { tgId, query, details, planType } = req.body;
-        if (!query || !tgId) {
-        return res.status(400).json({ success: false, error: 'Missing parameters' });
-    }
+    
+    if (!query || !tgId) {
+        return res.status(400).json({ success: false, error: 'Missing parameters' });    }
 
     try {
         await createUser(tgId, null, null);
@@ -281,7 +279,7 @@ app.post('/api/generate', async (req, res) => {
         
         // Извлекаем описание
         let description = '';
-        const descMatch = recipeText.match(/📝\s*([^\n]+(?:\n[^🍽🥄🔥✨]+)*)/);
+        const descMatch = recipeText.match(/📝\s*([^\n]+(?:\n[^🍽🥄⏱🔥✨]+)*)/);
         if (descMatch) description = descMatch[1].trim();
         
         // Извлекаем ингредиенты
@@ -292,21 +290,21 @@ app.post('/api/generate', async (req, res) => {
                 .split('\n')
                 .filter(l => l.trim())
                 .map(l => l.replace(/^[•\-*\d.]\s*/, '').trim());
-        }        
-        // Извлекаем время
-        let time = '30 минут';
+        }
+        
+        // Извлекаем время        let time = '30 минут';
         const timeMatch = recipeText.match(/⏱\s*([^\n]+)/);
         if (timeMatch) time = timeMatch[1].trim();
         
         // Извлекаем советы
         let tips = '';
-        const tipsMatch = recipeText.match(/✨\s*([^\n]+(?:\n[^🍽📝⏱🔥]+)*)/);
+        const tipsMatch = recipeText.match(/✨\s*([^\n]+(?:\n[^🍽📝🥄⏱🔥]+)*)/);
         if (tipsMatch) tips = tipsMatch[1].trim();
         
         // Извлекаем КБЖУ для VIP
         let nutrition = null;
         if (isVIP) {
-            const nutritionMatch = recipeText.match(/📊\s*([^\n]+(?:\n[^🍽📝⏱🔥✨]+)*)/);
+            const nutritionMatch = recipeText.match(/📊\s*([^\n]+(?:\n[^🍽📝🥄⏱🔥✨]+)*)/);
             if (nutritionMatch) {
                 nutrition = { text: nutritionMatch[1].trim() };
             }
@@ -341,9 +339,9 @@ app.post('/api/generate', async (req, res) => {
 });
 
 // Create payment
-app.post('/api/create-payment', async (req, res) => {    const { tgId, planType, amount } = req.body;
-    
-    try {
+app.post('/api/create-payment', async (req, res) => {
+    const { tgId, planType, amount } = req.body;
+        try {
         const result = await pool.query(
             `INSERT INTO payments (user_id, amount, status, plan_type) 
              VALUES ($1, $2, 'pending', $3) RETURNING id`,
@@ -390,9 +388,9 @@ app.post('/api/upload-receipt', upload.single('receipt'), async (req, res) => {
                 ]
             };
             
-            try {                await bot.telegram.sendMessage(ADMIN_ID, caption, {
-                    reply_markup: keyboard
-                });
+            try {
+                await bot.telegram.sendMessage(ADMIN_ID, caption, {
+                    reply_markup: keyboard                });
             } catch (e) {
                 console.error('Admin notification error:', e);
             }
@@ -439,9 +437,9 @@ app.get('/api/payments/:tgId', async (req, res) => {
     const { tgId } = req.params;
     try {
         const { rows } = await pool.query(
-            `SELECT * FROM payments WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10`,            [tgId]
-        );
-        res.json({ success: true, payments: rows });
+            `SELECT * FROM payments WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10`,
+            [tgId]
+        );        res.json({ success: true, payments: rows });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -488,9 +486,9 @@ function setupCron() {
             }
             
             const { rowCount } = await pool.query(
-                `UPDATE subscriptions SET is_active = FALSE WHERE expires_at < NOW()`            );
-            if (rowCount > 0) console.log(`✅ Деактивировано ${rowCount} просроченных подписок`);
-            
+                `UPDATE subscriptions SET is_active = FALSE WHERE expires_at < NOW()`
+            );
+            if (rowCount > 0) console.log(`✅ Деактивировано ${rowCount} просроченных подписок`);            
         } catch (e) { 
             console.error('CRON error:', e.message); 
         }
@@ -537,9 +535,9 @@ bot.start(async (ctx) => {
             await ctx.reply(msg, { 
                 parse_mode: 'HTML',
                 reply_markup: {
-                    keyboard: [                        ['📋 Ожидающие оплаты', '📥 Экспорт подписок'],
-                        ['📊 Статистика', 'ℹ️ Помощь']
-                    ],
+                    keyboard: [
+                        ['📋 Ожидающие оплаты', '📥 Экспорт подписок'],
+                        ['📊 Статистика', 'ℹ️ Помощь']                    ],
                     resize_keyboard: true
                 }
             });
@@ -586,9 +584,9 @@ bot.hears('📋 Ожидающие оплаты', async (ctx) => {
             msg += `<b>#${r.id}</b> — ${r.first_name || '?'} (@${r.username || 'нет'})\n`;
             msg += `💎 ${r.plan_type} | 💰 ${r.amount}₽ | ${new Date(r.created_at).toLocaleDateString()}\n\n`;
         });
-        ctx.reply(msg, { parse_mode: 'HTML' });    } catch (e) { 
-        ctx.reply('❌ Ошибка: ' + e.message); 
-    }
+        ctx.reply(msg, { parse_mode: 'HTML' });
+    } catch (e) { 
+        ctx.reply('❌ Ошибка: ' + e.message);     }
 });
 
 bot.hears('📊 Статистика', async (ctx) => {
@@ -635,9 +633,9 @@ bot.hears('📥 Экспорт подписок', async (ctx) => {
     }
 });
 
-bot.hears('ℹ️ Помощь', (ctx) => {    if (ctx.from.id !== ADMIN_ID) return;
-    ctx.reply(
-        `📚 <b>Помощь по боту</b>\n\n` +
+bot.hears('ℹ️ Помощь', (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return;
+    ctx.reply(        `📚 <b>Помощь по боту</b>\n\n` +
         `• Одобрение платежей происходит вручную\n` +
         `• Все данные хранятся в PostgreSQL\n` +
         `• Бот использует GigaChat для генерации рецептов\n` +
@@ -684,9 +682,9 @@ bot.action(/^approve_(\d+)$/, async (ctx) => {
         
         try {
             await ctx.telegram.sendMessage(
-                payment.user_id,                `🎉 <b>${payment.plan_type} подписка активирована!</b>\n\n` +
-                `📅 Действует до: ${expiresAt.toLocaleDateString('ru-RU')}\n` +
-                `🍳 Готовьте с удовольствием!`,
+                payment.user_id,
+                `🎉 <b>${payment.plan_type} подписка активирована!</b>\n\n` +
+                `📅 Действует до: ${expiresAt.toLocaleDateString('ru-RU')}\n` +                `🍳 Готовьте с удовольствием!`,
                 { parse_mode: 'HTML' }
             );
         } catch (e) {
@@ -734,8 +732,8 @@ bot.action(/^reject_(\d+)$/, async (ctx) => {
         await ctx.answerCbQuery('❌ Ошибка', { show_alert: true }); 
     }
 });
-// ===== ЗАПУСК (ТОЛЬКО POLLING MODE) =====
-async function start() {
+
+// ===== ЗАПУСК (ТОЛЬКО POLLING MODE) =====async function start() {
     await initDB();
     setupCron();
     
