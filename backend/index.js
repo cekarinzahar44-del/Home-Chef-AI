@@ -733,27 +733,32 @@ bot.action(/^reject_(\d+)$/, async (ctx) => {
     }
 });
 
-// ===== ЗАПУСК (ТОЛЬКО POLLING MODE) =====async function start() {
-    await initDB();
-    setupCron();
-    
-    // Запускаем сервер
-    app.listen(PORT, () => {
-        console.log(`🚀 Server running on port ${PORT}`);
-        console.log(`📱 WebApp available at https://bot-1779392471-6640-zahar0304.bothost.tech`);
-        console.log(`🤖 Bot polling mode active`);
-        console.log(`👨‍💼 Admin ID: ${ADMIN_ID}`);
-    });
+    // ===== ЗАПУСК (IIFE - самовызывающаяся async функция) =====
+(async () => {
+    try {
+        await initDB();
+        setupCron();
+        
+        // Запускаем сервер
+        app.listen(PORT, () => {
+            console.log(`🚀 Server running on port ${PORT}`);
+            console.log(`📱 WebApp available at https://bot-1779392471-6640-zahar0304.bothost.tech`);
+            console.log(`🤖 Bot polling mode active`);
+            console.log(`👨‍💼 Admin ID: ${ADMIN_ID}`);
+        });
 
-    // Запускаем бота в polling mode (без вебхука)
-    bot.launch();
-    console.log('✅ Bot started in polling mode');
-}
+        // Запускаем бота в polling mode (без вебхука)
+        await bot.launch();
+        console.log('✅ Bot started in polling mode');
+    } catch (err) {
+        console.error('❌ Fatal error:', err.message);
+        console.error(err.stack);
+        process.exit(1);
+    }
+})();
 
-start().catch(err => {
-    console.error('❌ Fatal error:', err.message);
-    console.error(err.stack);
-    process.exit(1);
-});
+// Обработка завершения процесса
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
 module.exports = { pool, bot };
