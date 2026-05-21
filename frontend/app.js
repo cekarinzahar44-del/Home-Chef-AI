@@ -23,7 +23,7 @@ try {
 }
 
 // ===== API BASE (используем текущий домен) =====
-const API_BASE = window.location.origin;
+const API_BASE = 'https://bot-1779392471-6640-zahar0304.bothost.tech';
 
 // App state
 let currentUser = null;
