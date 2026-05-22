@@ -2,6 +2,7 @@ const tg = window.Telegram?.WebApp;
 if (tg) {
   tg.ready();
   tg.expand();
+  tg.setHeaderColor?.('secondary_bg_color');
 }
 
 const initData = tg?.initData || '';
@@ -46,8 +47,8 @@ const API = {
 };
 
 // ===== STATE =====
-const state = {
-  currentTab: 'dashboard',  paymentsPage: 1,
+const state = {  currentTab: 'dashboard',
+  paymentsPage: 1,
   usersPage: 1,
   currentPaymentId: null,
   currentUserId: null,
@@ -95,8 +96,8 @@ async function init() {
 
 function showError(msg) {
   document.getElementById('loader').style.display = 'none';
-  const denied = document.getElementById('access-denied');
-  denied.style.display = 'flex';  denied.querySelector('p').textContent = msg;
+  const denied = document.getElementById('access-denied');  denied.style.display = 'flex';
+  denied.querySelector('p').textContent = msg;
 }
 
 // ===== NAVIGATION =====
@@ -144,8 +145,8 @@ async function loadDashboard() {
     document.getElementById('stat-vip-count').textContent = b.vip_subs || 0;
     
     // График регистраций
-    renderLineChart('chart-registrations', stats.regChart, 'Регистрации', '#667eea');
-        // График выручки
+    renderLineChart('chart-registrations', stats.regChart, 'Регистрации', '#667eea');    
+    // График выручки
     renderLineChart('chart-revenue', stats.revChart, 'Выручка ₽', '#10b981', 'revenue');
     
     // График тарифов
@@ -193,8 +194,8 @@ function renderLineChart(id, data, label, color, valueKey = 'count') {
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        x: {
-          ticks: { color: '#8b8b9e', maxRotation: 45 },          grid: { color: 'rgba(255,255,255,0.05)' }
+        x: {          ticks: { color: '#8b8b9e', maxRotation: 45 },
+          grid: { color: 'rgba(255,255,255,0.05)' }
         },
         y: {
           ticks: { color: '#8b8b9e' },
@@ -242,8 +243,8 @@ function renderExpiringList(items) {
     return;
   }
   
-  list.innerHTML = items.map(s => `
-    <div class="data-item">      <div class="data-item-info">
+  list.innerHTML = items.map(s => `    <div class="data-item">
+      <div class="data-item-info">
         <div class="data-item-title">${s.first_name || '—'} ${s.username ? `@${s.username}` : ''}</div>
         <div class="data-item-sub">
           <span class="badge badge-${s.plan_type.toLowerCase()}">${s.plan_type}</span>
@@ -286,14 +287,12 @@ function renderPaymentsList(payments) {
   list.innerHTML = payments.map(p => `
     <div class="data-item">
       <div class="data-item-info">
-        <div class="data-item-title">
-          #${p.id} · ${p.first_name || '—'} ${p.username ? `@${p.username}` : ''}
-        </div>
+        <div class="data-item-title">#${p.id} · ${p.first_name || '—'} ${p.username ? `@${p.username}` : ''}</div>
         <div class="data-item-sub">
           <span class="badge badge-${p.status}">${statusText(p.status)}</span>
           <span class="badge badge-${p.plan_type.toLowerCase()}">${p.plan_type}</span>
-          ${p.amount}₽ · ${new Date(p.created_at).toLocaleString('ru-RU')}        </div>
-      </div>
+          ${p.amount}₽ · ${new Date(p.created_at).toLocaleString('ru-RU')}
+        </div>      </div>
       <div class="data-item-actions">
         ${p.receipt_file_path ? `<button class="btn-sm btn-primary" onclick="viewReceipt(${p.id}, '${p.receipt_file_path}')">👁 Чек</button>` : ''}
         ${p.status === 'pending' ? `
@@ -315,8 +314,7 @@ function statusText(status) {
 async function loadUsers(page = 1) {
   state.usersPage = page;
   const search = document.getElementById('search-users').value;
-  const plan = document.getElementById('filter-user-plan').value;
-  
+  const plan = document.getElementById('filter-user-plan').value;  
   try {
     const data = await API.getUsers({
       search,
@@ -341,13 +339,10 @@ function renderUsersList(users) {
   
   list.innerHTML = users.map(u => {
     const plan = u.plan_type || 'FREE';
-    const expires = u.expires_at ? new Date(u.expires_at).toLocaleDateString('ru-RU') : '—';    return `
-      <div class="data-item">
-        <div class="data-item-info">
-          <div class="data-item-title">
-            ${u.first_name || '—'} ${u.username ? `@${u.username}` : ''}
-            ${u.is_banned ? '🚫' : ''}
-          </div>
+    const expires = u.expires_at ? new Date(u.expires_at).toLocaleDateString('ru-RU') : '—';
+    return `
+      <div class="data-item">        <div class="data-item-info">
+          <div class="data-item-title">${u.first_name || '—'} ${u.username ? `@${u.username}` : ''} ${u.is_banned ? '🚫' : ''}</div>
           <div class="data-item-sub">
             <span class="badge badge-${plan.toLowerCase()}">${plan}</span>
             До: ${expires} · Рецептов: ${u.free_recipes_used || 0} · Оплат: ${u.total_paid || 0}
@@ -390,12 +385,12 @@ async function loadSubscriptions() {
           </div>
         </div>
       </div>
-      <div class="section-card">        <h3>⏰ Истекают в 7 дней</h3>
+      <div class="section-card">
+        <h3>⏰ Истекают в 7 дней</h3>
         <div id="subs-expiring"></div>
       </div>
     `;
-    renderExpiringListDetailed(stats.expiring);
-  } catch (e) {
+    renderExpiringListDetailed(stats.expiring);  } catch (e) {
     toast('Ошибка: ' + e.message, 'error');
   }
 }
@@ -439,21 +434,21 @@ function setupFilters() {
 // ===== PAGINATION =====
 function renderPagination(containerId, currentPage, totalPages, loadFn) {
   const container = document.getElementById(containerId);
-  if (totalPages <= 1) {    container.innerHTML = '';
+  if (totalPages <= 1) {
+    container.innerHTML = '';
     return;
   }
   
-  let html = '';
-  const maxPages = 5;
+  let html = '';  const maxPages = 5;
   let start = Math.max(1, currentPage - 2);
   let end = Math.min(totalPages, start + maxPages - 1);
   start = Math.max(1, end - maxPages + 1);
   
-  if (start > 1) html += `<button class="page-btn" onclick="(${loadFn.name})(1)">«</button>`;
+  if (start > 1) html += `<button class="page-btn" onclick="${loadFn.name}(1)">«</button>`;
   for (let i = start; i <= end; i++) {
-    html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="(${loadFn.name})(${i})">${i}</button>`;
+    html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="${loadFn.name}(${i})">${i}</button>`;
   }
-  if (end < totalPages) html += `<button class="page-btn" onclick="(${loadFn.name})(${totalPages})">»</button>`;
+  if (end < totalPages) html += `<button class="page-btn" onclick="${loadFn.name}(${totalPages})">»</button>`;
   
   container.innerHTML = html;
 }
@@ -488,12 +483,12 @@ window.rejectPayment = async () => {
     toast('❌ Отклонено');
     closeReceiptModal();
     loadPayments(state.paymentsPage);
-  } catch (e) {    toast('Ошибка: ' + e.message, 'error');
+  } catch (e) {
+    toast('Ошибка: ' + e.message, 'error');
   }
 };
 
-window.quickApprove = async (id) => {
-  if (!confirm('Одобрить?')) return;
+window.quickApprove = async (id) => {  if (!confirm('Одобрить?')) return;
   try {
     await API.approvePayment(id);
     toast('✅ Одобрено');
@@ -537,12 +532,12 @@ window.viewUser = async (tgId) => {
           <div class="user-detail-value"><code>${u.tg_id}</code></div>
         </div>
         <div class="user-detail-item">
-          <div class="user-detail-label">Регистрация</div>          <div class="user-detail-value">${new Date(u.created_at).toLocaleDateString('ru-RU')}</div>
+          <div class="user-detail-label">Регистрация</div>
+          <div class="user-detail-value">${new Date(u.created_at).toLocaleDateString('ru-RU')}</div>
         </div>
         <div class="user-detail-item">
           <div class="user-detail-label">Рецептов создано</div>
-          <div class="user-detail-value">${u.free_recipes_used || 0}</div>
-        </div>
+          <div class="user-detail-value">${u.free_recipes_used || 0}</div>        </div>
       </div>
       
       <div class="section-title">💎 Активная подписка</div>
@@ -586,12 +581,12 @@ window.viewUser = async (tgId) => {
               </div>
             </div>
           `).join('')}
-        </div>      ` : ''}
+        </div>
+      ` : ''}
     `;
   } catch (e) {
     content.innerHTML = `<div class="empty-state">❌ ${e.message}</div>`;
-  }
-};
+  }};
 
 window.closeUserModal = () => {
   document.getElementById('user-modal').style.display = 'none';
@@ -635,12 +630,12 @@ window.exportData = async (type) => {
     const a = document.createElement('a');
     a.href = url;
     a.download = `${type}_${new Date().toISOString().split('T')[0]}.xlsx`;
-    a.click();    URL.revokeObjectURL(url);
+    a.click();
+    URL.revokeObjectURL(url);
     toast('📥 Файл скачан');
   } catch (e) {
     toast('Ошибка: ' + e.message, 'error');
-  }
-};
+  }};
 
 // ===== START =====
 init();
