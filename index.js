@@ -1,3 +1,4 @@
+// BotHost: отключаем предупреждения о самоподписанных сертификатах
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 require('dotenv').config();
 
@@ -90,13 +91,13 @@ global.sendPhotoToAdmin = async (filePath, caption, keyboard) => {
 // /start
 bot.start(async (ctx) => {
   if (ctx.from.id === ADMIN_ID) {
-    return require('./admin')(ctx, pool, ADMIN_ID);
+    return require('./admin-handlers')(ctx, pool, ADMIN_ID);
   }
 
   await pool.query(
-    `INSERT INTO users (tg_id, username, first_name, free_recipes_used)
-     VALUES ($1,$2,$3,0) ON CONFLICT (tg_id) DO NOTHING`,
-    [ctx.from.id, ctx.from.username, ctx.from.first_name]  );
+    `INSERT INTO users (tg_id, username, first_name, free_recipes_used) 
+     VALUES ($1,$2,$3,0) ON CONFLICT (tg_id) DO NOTHING`,    [ctx.from.id, ctx.from.username, ctx.from.first_name]
+  );
 
   await ctx.reply(
     '👨‍🍳 <b>Шеф-Повар AI</b>\n\n' +
@@ -128,7 +129,8 @@ async function start() {
     `CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       tg_id BIGINT UNIQUE NOT NULL,
-      username TEXT, first_name TEXT,
+      username TEXT,
+      first_name TEXT,
       free_recipes_used INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT NOW()
     )`,
@@ -143,9 +145,9 @@ async function start() {
     `CREATE TABLE IF NOT EXISTS payments (
       id SERIAL PRIMARY KEY,
       user_id BIGINT REFERENCES users(tg_id),
-      amount INTEGER NOT NULL,
-      receipt_file_path TEXT,
-      status VARCHAR(20) DEFAULT 'pending',      plan_type VARCHAR(10) NOT NULL,
+      amount INTEGER NOT NULL,      receipt_file_path TEXT,
+      status VARCHAR(20) DEFAULT 'pending',
+      plan_type VARCHAR(10) NOT NULL,
       created_at TIMESTAMP DEFAULT NOW()
     )`
   ];
@@ -162,8 +164,9 @@ async function start() {
   cron.schedule('0 10 * * *', async () => {
     try {
       const { rows } = await pool.query(
-        `SELECT u.tg_id, s.expires_at, s.plan_type
-         FROM subscriptions s JOIN users u ON s.user_id = u.tg_id
+        `SELECT u.tg_id, s.expires_at, s.plan_type 
+         FROM subscriptions s 
+         JOIN users u ON s.user_id = u.tg_id 
          WHERE s.is_active = TRUE AND s.expires_at BETWEEN NOW() AND NOW() + INTERVAL '3 days'`
       );
       for (const s of rows) {
@@ -191,10 +194,10 @@ async function start() {
   if (MINI_APP_URL) {
     bot.telegram.setChatMenuButton({
       menu_button: {
-        type: 'web_app',
-        text: '🍳 Шеф-Повар',
+        type: 'web_app',        text: '🍳 Шеф-Повар',
         web_app: { url: MINI_APP_URL }
-      }    }).catch(() => {});
+      }
+    }).catch(() => {});
   }
 
   process.once('SIGINT', () => { bot.stop('SIGINT'); pool.end(); });
