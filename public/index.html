@@ -239,31 +239,37 @@
   </section>
 
   <!-- ═══ VIP: WEEK MENU ═══ -->
-  <section id="screen-weekmenu" class="screen">
-    <div class="screen-header">
-      <button class="back-btn" onclick="showScreen('profile')">Назад</button>
-      <div class="screen-title">Меню на неделю</div>
+<!-- VIP: WEEK MENU -->
+<section id="screen-weekmenu" class="screen">
+  <button class="back-btn" onclick="showScreen('profile')">← Назад</button>
+  <h2>📅 Меню на неделю</h2>
+  
+  <div class="vip-feature-card">
+    <div class="vip-icon">🗓</div>
+    <h3>Персональное меню</h3>
+    <p class="hint">ИИ-шеф составит меню на 7 дней с полными рецептами, шагами и списком покупок</p>
+    <div class="form-group">
+      <label>Ваши предпочтения</label>
+      <textarea id="weekmenu-prefs" rows="3" placeholder="Например: без мяса, бюджетно, на 2 человек, похудение..."></textarea>
     </div>
-
-    <div class="screen-content">
-      <div class="vip-feature-card">
-        <span class="vip-icon">🗓</span>
-        <h3>Персональное меню</h3>
-        <p class="hint" style="margin-bottom:20px; text-align:left;">ИИ составит меню на 7 дней с учётом твоих предпочтений</p>
-        <div class="form-group">
-          <label class="form-label">Предпочтения и ограничения</label>
-          <div class="form-input-wrap">
-            <textarea id="weekmenu-prefs" rows="3" placeholder="Без мяса, бюджетно, на 2 человек…"></textarea>
-          </div>
-        </div>
-        <button id="btn-generate-weekmenu" class="primary-btn gold full">✨ Составить меню</button>
-      </div>
-
-      <div id="weekmenu-result" class="step-card" style="display:none;">
-        <div id="weekmenu-text" class="step-text"></div>
-      </div>
+    <button id="btn-generate-weekmenu" class="primary-btn full">✨ Составить меню</button>
+  </div>
+  
+  <div id="weekmenu-result" class="weekmenu-container" style="display:none;">
+    <div class="weekmenu-actions">
+      <button id="btn-download-weekmenu" class="primary-btn gold">
+        📄 Скачать PDF
+      </button>
+      <button id="btn-print-weekmenu" class="ghost-btn">
+        🖨 Печать
+      </button>
+      <button id="btn-share-weekmenu" class="ghost-btn">
+        📤 Поделиться
+      </button>
     </div>
-  </section>
+    <div id="weekmenu-text" class="weekmenu-content"></div>
+  </div>
+</section>
 
   <!-- ═══ VIP: DIET ═══ -->
   <section id="screen-diet" class="screen">
