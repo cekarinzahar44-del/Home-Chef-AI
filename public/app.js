@@ -406,43 +406,7 @@ document.getElementById('btn-generate-weekmenu').addEventListener('click', async
     btn.textContent = originalText;
   }
 });
-// ===== VIP: DIET =====
-document.getElementById('btn-ask-diet').addEventListener('click', async () => {
-  const question = document.getElementById('diet-question').value.trim();
-  if (!question) return alert('Задай вопрос');
-  const btn = document.getElementById('btn-ask-diet');
-  btn.disabled = true;
-  btn.textContent = '⏳ Думаю...';
-  try {
-    const data = await API.askDiet(question);
-    document.getElementById('diet-text').innerHTML = data.answer.replace(/\n/g, '<br>');
-    document.getElementById('diet-result').style.display = 'block';
-  } catch (e) {
-    if (e.message.includes('Только для VIP')) {
-      alert('🔒 Эта функция доступна только с VIP подпиской');
-      showScreen('subscription');
-    } else {
-      alert('Ошибка: ' + e.message);
-    }
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '💬 Спросить';
-  }
-});
-// ===== PROFILE =====
-async function loadProfile() {
-  try {
-    const data = await API.getFullProfile();
-    document.getElementById('profile-name').textContent = data.user?.first_name || 'Пользователь';
-    document.getElementById('profile-username').textContent = data.user?.username ? '@' + data.user.username : '';
-    document.getElementById('stat-recipes').textContent = data.user?.free_recipes_used || 0;
-    document.getElementById('stat-plan').textContent = data.subscription?.plan_type || 'FREE';
-    document.getElementById('stat-expires').textContent = data.subscription
-      ? new Date(data.subscription.expires_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
-      : '—';  } catch (e) {
-    console.error('Profile error:', e);
-  }
-}
+
 // ===== СКАЧАТЬ PDF =====
 document.getElementById('btn-download-weekmenu').addEventListener('click', async () => {
   const btn = document.getElementById('btn-download-weekmenu');
@@ -451,6 +415,7 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
   btn.innerHTML = '<span class="loading-spinner"></span> Генерируем PDF...';
   
   try {
+    // Используем правильный способ генерации PDF
     const content = document.getElementById('weekmenu-text').innerHTML;
     
     // Создаем HTML-документ для PDF
@@ -474,8 +439,7 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
             text-align: center; 
             margin-bottom: 30px;
             font-size: 28px;
-          }
-          .day { 
+          }          .day { 
             margin-bottom: 30px; 
             border-bottom: 1px solid #eee; 
             padding-bottom: 20px;
@@ -488,7 +452,8 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
             color: #667eea; 
             font-size: 22px;
             margin-bottom: 10px;
-          }          .ingredients { 
+          }
+          .ingredients { 
             margin-left: 20px; 
             margin-bottom: 10px;
           }
@@ -523,8 +488,7 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
           <p>Составлено для вас с учетом ваших предпочтений</p>
         </div>
         ${content}
-      </body>
-      </html>
+      </body>      </html>
     `;
     
     // Конфигурация PDF
@@ -537,7 +501,8 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff'
-      },      jsPDF: { 
+      },
+      jsPDF: { 
         unit: 'mm', 
         format: 'a4', 
         orientation: 'portrait' 
@@ -546,11 +511,7 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
     };
     
     // Генерация PDF
-    const { jsPDF } = html2pdf();
-    const pdf = new jsPDF(opt.jsPDF);
-    
-    // Добавляем HTML в PDF
-    await html2pdf().from(htmlContent).set(opt).toPdf().get('pdf').save(opt.filename);
+    await html2pdf().from(htmlContent).set(opt).save(opt.filename);
     
     tg?.HapticFeedback?.notificationOccurred('success');
     toast('📄 PDF сохранён!');
@@ -576,8 +537,7 @@ document.getElementById('btn-print-weekmenu').addEventListener('click', () => {
       <title>Меню на неделю</title>
       <style>
         body { 
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-          padding: 20px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;          padding: 20px;
           line-height: 1.6;
           color: #1a1a24;
           max-width: 800px;
@@ -586,7 +546,8 @@ document.getElementById('btn-print-weekmenu').addEventListener('click', () => {
         .weekmenu-header-card {
           text-align: center;
           padding: 30px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);          color: white;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
           border-radius: 16px;
           margin-bottom: 30px;
           box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
@@ -625,8 +586,7 @@ document.getElementById('btn-print-weekmenu').addEventListener('click', () => {
             visibility: visible;
           }
           #weekmenu-text {
-            position: absolute;
-            left: 0;
+            position: absolute;            left: 0;
             top: 0;
             width: 100%;
             background: white;
@@ -635,7 +595,8 @@ document.getElementById('btn-print-weekmenu').addEventListener('click', () => {
           }
           .weekmenu-header-card {
             background: #667eea !important;
-            -webkit-print-color-adjust: exact;            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           .week-day-header {
             background: #667eea !important;
@@ -674,8 +635,7 @@ document.getElementById('btn-share-weekmenu').addEventListener('click', async ()
       await navigator.clipboard.writeText(text);
       toast('📋 Скопировано в буфер!');
       tg?.HapticFeedback?.notificationOccurred('success');
-    } catch (e) {
-      alert('Не удалось скопировать');
+    } catch (e) {      alert('Не удалось скопировать');
     }
   }
 });
@@ -684,7 +644,8 @@ document.getElementById('btn-share-weekmenu').addEventListener('click', async ()
 function toast(message, type = 'success') {
   const existing = document.querySelector('.toast-msg');
   if (existing) existing.remove();
-    const el = document.createElement('div');
+  
+  const el = document.createElement('div');
   el.className = `toast-msg toast-${type}`;
   el.textContent = message;
   el.style.cssText = `
@@ -716,6 +677,45 @@ if (!document.getElementById('toast-styles')) {
     }
   `;
   document.head.appendChild(style);
+}
+
+// ===== VIP: DIET =====
+document.getElementById('btn-ask-diet').addEventListener('click', async () => {
+  const question = document.getElementById('diet-question').value.trim();
+  if (!question) return alert('Задай вопрос');
+  const btn = document.getElementById('btn-ask-diet');
+  btn.disabled = true;  btn.textContent = '⏳ Думаю...';
+  try {
+    const data = await API.askDiet(question);
+    document.getElementById('diet-text').innerHTML = data.answer.replace(/\n/g, '<br>');
+    document.getElementById('diet-result').style.display = 'block';
+  } catch (e) {
+    if (e.message.includes('Только для VIP')) {
+      alert('🔒 Эта функция доступна только с VIP подпиской');
+      showScreen('subscription');
+    } else {
+      alert('Ошибка: ' + e.message);
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💬 Спросить';
+  }
+});
+
+// ===== PROFILE =====
+async function loadProfile() {
+  try {
+    const data = await API.getFullProfile();
+    document.getElementById('profile-name').textContent = data.user?.first_name || 'Пользователь';
+    document.getElementById('profile-username').textContent = data.user?.username ? '@' + data.user.username : '';
+    document.getElementById('stat-recipes').textContent = data.user?.free_recipes_used || 0;
+    document.getElementById('stat-plan').textContent = data.subscription?.plan_type || 'FREE';
+    document.getElementById('stat-expires').textContent = data.subscription
+      ? new Date(data.subscription.expires_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
+      : '—';
+  } catch (e) {
+    console.error('Profile error:', e);
+  }
 }
 
 // ===== ЗАПУСК =====
