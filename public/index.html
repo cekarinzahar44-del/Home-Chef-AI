@@ -2,348 +2,674 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Шеф-Повар AI</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-  <link rel="stylesheet" href="/style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Nunito:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+
+  <!-- LOADER -->
   <div id="loader" class="loader-screen">
-    <div class="loader-emoji">👨‍🍳</div>
-    <p>Загружаем...</p>
+    <div class="loader-wrap">
+      <div class="loader-ring"></div>
+      <div class="loader-emoji-wrap">
+        <span class="loader-emoji">&#x1F9D1;&#x200D;&#x1F373;</span>
+      </div>
+    </div>
+    <p class="loader-text">Готовим приложение&#x2026;</p>
   </div>
-  
+
   <div id="access-denied" class="error-screen" style="display:none;">
-    <div class="error-emoji">🔒</div>
+    <div class="error-emoji">&#x1F512;</div>
     <p>Доступ запрещён</p>
   </div>
-  
-  <!-- ВЫБОР ЭКРАНА -->
-  <div id="screen-home" class="screen active">
-    <div class="app-header">
-      <h1>Шеф-Повар AI</h1>
-      <button class="icon-btn-sm" onclick="showScreen('profile')">
-        <span>👤</span>
-      </button>
-    </div>
-    
+
+  <!-- HOME -->
+  <div id="screen-home" class="screen">
+    <header class="app-header">
+      <div class="header-brand">
+        <span class="brand-dot"></span>
+        <h1>Шеф&#x2011;Повар</h1>
+      </div>
+      <div class="header-right">
+        <div id="user-badge" class="badge">FREE</div>
+        <button class="avatar-btn" onclick="showScreen('profile')">&#x1F464;</button>
+      </div>
+    </header>
+
     <div class="hero">
-      <div class="hero-emoji">👨‍🍳</div>
-      <h2>Создаю уникальные рецепты с помощью ИИ!</h2>
-      <p class="hint">Скажи "Привет Шеф" или назови блюдо голосом</p>
+      <div class="hero-plate">
+        <span class="hero-emoji">&#x1F373;</span>
+      </div>
+      <h2>Что будем<br>готовить?</h2>
+      <p class="hint">Назови блюдо голосом или напиши</p>
     </div>
-    
-    <div class="input-area">
-      <textarea id="dish-input" placeholder="Например: борщ, паста, салат" rows="2"></textarea>
-      
-      <div class="quick-chips">
-        <div class="chip" data-dish="Борщ">Борщ</div>
-        <div class="chip" data-dish="Паста">Паста</div>
-        <div class="chip" data-dish="Салат">Салат</div>
-        <div class="chip" data-dish="Пицца">Пицца</div>
-        <div class="chip" data-dish="Омлет">Омлет</div>
-        <div class="chip" data-dish="Котлеты">Котлеты</div>
-      </div>      
+
+    <div class="input-card">
+      <textarea id="dish-input" placeholder="Например: паста карбонара&#x2026;" rows="2"></textarea>
       <div class="input-actions">
-        <button id="btn-voice" class="icon-btn">
-          <span>🎤</span>
-        </button>
-        <button id="btn-send" class="primary-btn full">
-          Готовим!
-        </button>
-      </div>
-      
-      <div class="voice-hint">
-        <b>💡 Совет:</b> Нажмите микрофон и скажите: "Блюдо из куриной грудки и помидоров"
+        <button id="btn-voice" class="mic-btn" title="Голос">&#x1F3A4;</button>
+        <button id="btn-send" class="primary-btn">Найти рецепт</button>
       </div>
     </div>
-    
-    <div class="status-bar">
-      <span id="free-count">Осталось: 3 из 3</span>
+
+    <div class="section-label">Быстрый выбор</div>
+    <div class="chips-row">
+      <button class="chip" data-dish="Борщ">&#x1F372; Борщ</button>
+      <button class="chip" data-dish="Паста">&#x1F35D; Паста</button>
+      <button class="chip" data-dish="Цезарь">&#x1F957; Цезарь</button>
+      <button class="chip" data-dish="Омлет">&#x1F373; Омлет</button>
+      <button class="chip" data-dish="Плов">&#x1F35A; Плов</button>
+      <button class="chip" data-dish="Котлеты">&#x1F356; Котлеты</button>
     </div>
+
+    <div class="status-pill-wrap">
+      <span id="free-count" class="status-pill">Загрузка&#x2026;</span>
+    </div>
+
+    <button class="profile-nav-btn" onclick="showScreen('profile')">
+      <span class="profile-nav-left">
+        <span class="profile-nav-icon">&#x1F464;</span>
+        <span>Мой профиль</span>
+      </span>
+      <span class="nav-arrow">&#x203A;</span>
+    </button>
   </div>
-  
-  <!-- ПОДРОБНОСТИ РЕЦЕПТА -->
+
+  <!-- DETAILS -->
   <div id="screen-details" class="screen">
-    <button class="back-btn" onclick="showScreen('home')">← Назад</button>
-    
-    <div class="app-header">
-      <h1>Уточни детали</h1>
+    <div class="screen-header">
+      <button class="back-btn" onclick="showScreen('home')">&#x2190; Назад</button>
+      <h2 class="screen-title">Детали блюда</h2>
+      <p class="screen-sub">Уточни параметры рецепта</p>
     </div>
-    
-    <div class="input-area">
-      <div class="form-group">
-        <label>Порций</label>
-        <input type="number" id="portions" placeholder="2" min="1" max="10" value="2">
+
+    <div class="form-wrap">
+      <div class="form-block">
+        <div class="form-label">Количество порций</div>
+        <div class="portions-row">
+          <button class="portions-btn" onclick="changePortions(-1)">&#x2212;</button>
+          <input type="number" id="portions" value="2" min="1" max="20" readonly>
+          <button class="portions-btn" onclick="changePortions(1)">&#x2B;</button>
+        </div>
       </div>
-      
-      <div class="form-group">
-        <label>Предпочтения</label>
+
+      <div class="form-block">
+        <div class="form-label">Предпочтения</div>
         <div class="pref-chips">
-          <div class="pref" data-pref="ПП">ПП</div>
-          <div class="pref" data-pref="Быстро">Быстро</div>
-          <div class="pref" data-pref="Бюджет">Бюджет</div>
-          <div class="pref" data-pref="Веган">Веган</div>
-          <div class="pref" data-pref="Остро">Остро</div>
+          <button class="pref" data-pref="ПП">&#x1F957; ПП</button>
+          <button class="pref" data-pref="Быстро">&#x26A1; Быстро</button>
+          <button class="pref" data-pref="Бюджетно">&#x1F4B0; Бюджет</button>
+          <button class="pref" data-pref="Вегетарианское">&#x1F331; Веган</button>
+          <button class="pref" data-pref="Острое">&#x1F336; Острое</button>
         </div>
       </div>
-      
-      <div class="form-group">
-        <label>Доп. пожелания</label>
-        <textarea id="extra-details" placeholder="Например: без соли, для ребенка"></textarea>
+
+      <div class="form-block">
+        <div class="form-label">Дополнительные пожелания</div>
+        <div class="textarea-wrap">
+          <textarea id="extra-details" rows="3" placeholder="Без лука, поострее, с сыром&#x2026;"></textarea>
+        </div>
       </div>
-            <button id="btn-generate" class="primary-btn full">
-        👨‍🍳 Готовим!
-      </button>
+
+      <button id="btn-generate" class="primary-btn full-btn">&#x1F468;&#x200D;&#x1F373; Приготовить рецепт</button>
     </div>
   </div>
-  
-  <!-- РЕЦЕПТ -->
+
+  <!-- LOADING -->
+  <div id="screen-loading" class="screen loading-screen">
+    <div class="cooking-loader">
+      <div class="cooking-ring"></div>
+      <div class="cooking-ring-2"></div>
+      <span class="cooking-emoji">&#x1F468;&#x200D;&#x1F373;</span>
+    </div>
+    <div class="cooking-title">Шеф готовит рецепт</div>
+    <div class="hint">Займёт несколько секунд&#x2026;</div>
+    <div class="dot-row">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+
+  <!-- RECIPE -->
   <div id="screen-recipe" class="screen">
-    <button class="back-btn" onclick="showScreen('home')">← Назад</button>
-    
-    <div class="app-header">
-      <h1 id="recipe-title">Твой рецепт</h1>
+    <div class="recipe-topbar">
+      <button class="back-btn" onclick="showScreen('home')">&#x2190; Назад</button>
+      <div class="recipe-actions">
+        <button id="btn-voice-nav" class="icon-btn" title="Голосовое управление">&#x1F3A4;</button>
+        <button id="btn-voice-read" class="icon-btn" title="Озвучить">&#x1F50A;</button>
+      </div>
     </div>
-    
+
+    <h2 id="recipe-title" class="recipe-title"></h2>
+
+    <div class="voice-tip">
+      &#x1F4A1; Скажи: <b>«далее»</b>, <b>«назад»</b>, <b>«повтори»</b>, <b>«стоп»</b>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-meta">
+        <span>Шаг <span id="step-current">1</span> из <span id="step-total">5</span></span>
+        <span id="step-percent">20%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="step-progress-fill" style="width:20%"></div>
+      </div>
+    </div>
+
     <div class="step-card">
-      <div class="step-number">Шаг <span id="step-current">1</span> из <span id="step-total">5</span></div>
-      <div class="step-text" id="step-text">
-        Текст шага
-      </div>
-      
-      <div class="step-nav">
-        <button id="btn-prev" class="nav-btn" disabled>← Назад</button>
-        <button id="btn-next" class="nav-btn primary">Далее ➡️</button>
-      </div>
-      
-      <div class="step-actions">
-        <button id="btn-voice-read" class="btn-sm ghost-btn">
-          🎤 Озвучить
-        </button>
-        <button id="btn-full-recipe" class="btn-sm ghost-btn">
-          📜 Весь рецепт
-        </button>
-      </div>
+      <div id="step-text" class="step-text"></div>
     </div>
-    
-    <div class="voice-hint">
-      <b>💡 Совет:</b> Скажите "далее", "назад", "повтори", "стоп" для управления голосом
+
+    <div id="step-timer-wrap" class="timer-bar" style="display:none;">
+      <span class="timer-label">&#x23F1; Таймер шага</span>
+      <span id="step-timer-display" class="timer-value">00:00</span>
+      <button id="btn-step-timer" class="timer-btn">Старт</button>
+    </div>
+
+    <div class="step-nav">
+      <button id="btn-prev" class="nav-btn">&#x2190; Назад</button>
+      <button id="btn-next" class="nav-btn accent">Далее &#x2192;</button>
+    </div>
+
+    <div class="recipe-extras">
+      <button id="btn-shopping-list" class="extra-btn" onclick="showShoppingList()">
+        <span class="extra-icon">&#x1F6D2;</span>
+        <span class="extra-info">
+          <b>Список покупок</b>
+          <small>Все ингредиенты одним нажатием</small>
+        </span>
+        <span id="lock-shopping" class="extra-lock">&#x1F512;</span>
+      </button>
+      <button id="btn-share-recipe" class="extra-btn" onclick="shareRecipe()">
+        <span class="extra-icon">&#x1F4E4;</span>
+        <span class="extra-info">
+          <b>Поделиться рецептом</b>
+          <small>Отправить другу в Telegram</small>
+        </span>
+        <span id="lock-share" class="extra-lock">&#x1F512;</span>
+      </button>
+      <button id="btn-full-recipe" class="ghost-btn full-btn">&#x1F4DC; Весь рецепт текстом</button>
     </div>
   </div>
-  
-  <!-- ПОДПИСКИ -->
+
+  <!-- SHOPPING LIST -->
+  <div id="screen-shopping" class="screen">
+    <div class="screen-header">
+      <button class="back-btn" onclick="showScreen('recipe')">&#x2190; Назад</button>
+      <h2 class="screen-title">Список покупок</h2>
+      <p class="screen-sub" id="shopping-recipe-name"></p>
+    </div>
+    <div class="form-wrap">
+      <div id="shopping-loading" class="feature-loading">
+        <div class="dot-row"><span></span><span></span><span></span></div>
+        <p>Шеф составляет список&#x2026;</p>
+      </div>
+      <div id="shopping-list-wrap" style="display:none;">
+        <div id="shopping-items" class="check-list"></div>
+        <button class="primary-btn full-btn" onclick="copyShoppingList()" style="margin-top:16px;">
+          &#x1F4CB; Скопировать список
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div id="screen-history" class="screen">
+    <div class="screen-header">
+      <button class="back-btn" onclick="showScreen('profile')">&#x2190; Назад</button>
+      <h2 class="screen-title">История рецептов</h2>
+      <p class="screen-sub">Последние 10 блюд</p>
+    </div>
+    <div class="form-wrap">
+      <div id="history-empty" class="empty-state" style="display:none;">
+        <div class="empty-icon">&#x1F37D;</div>
+        <p>Ещё нет сохранённых рецептов.<br>Приготовь первое блюдо!</p>
+      </div>
+      <div id="history-list" class="hist-list"></div>
+    </div>
+  </div>
+
+  <!-- FRIDGE SCAN -->
+  <div id="screen-fridge" class="screen">
+    <div class="screen-header">
+      <button class="back-btn" onclick="showScreen('profile')">&#x2190; Назад</button>
+      <h2 class="screen-title">Фото холодильника</h2>
+      <p class="screen-sub">ИИ подберёт рецепт по фото</p>
+    </div>
+    <div class="form-wrap">
+      <div class="vip-card">
+        <span class="vip-card-icon">&#x1F4F8;</span>
+        <h3>Сфотографируй холодильник</h3>
+        <p class="hint" style="margin-bottom:18px;text-align:left;">Загрузи фото — ИИ определит продукты и предложит лучшее блюдо</p>
+        <div class="upload-zone" id="fridge-upload-zone" onclick="document.getElementById('fridge-photo').click()">
+          <div id="fridge-preview-wrap" style="display:none;">
+            <img id="fridge-preview" src="" alt="" style="width:100%;border-radius:12px;max-height:180px;object-fit:cover;">
+          </div>
+          <div id="fridge-upload-ph">
+            <div style="font-size:42px;margin-bottom:8px;">&#x1F4F7;</div>
+            <div style="font-size:15px;font-weight:600;color:var(--text-2);">Нажми чтобы загрузить</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:3px;">JPG, PNG до 10 МБ</div>
+          </div>
+        </div>
+        <input type="file" id="fridge-photo" accept="image/*" capture="environment" style="display:none;" onchange="previewFridgePhoto(this)">
+        <button id="btn-analyze-fridge" class="primary-btn gold full-btn" style="margin-top:14px;" onclick="analyzeFridge()" disabled>
+          &#x1F50D; Что приготовить?
+        </button>
+      </div>
+      <div id="fridge-result" class="step-card" style="display:none;">
+        <div class="step-label">Рекомендация шефа</div>
+        <div id="fridge-text" class="step-text"></div>
+        <button class="primary-btn full-btn" style="margin-top:16px;" onclick="cookFromFridgeSuggestion()">Найти рецепт &#x2192;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FRIDGE TEXT -->
+  <div id="screen-fridge-text" class="screen">
+    <div class="screen-header">
+      <button class="back-btn" onclick="showScreen('profile')">&#x2190; Назад</button>
+      <h2 class="screen-title">Что есть в доме?</h2>
+      <p class="screen-sub">Спасение из остатков продуктов</p>
+    </div>
+    <div class="form-wrap">
+      <div class="vip-card">
+        <span class="vip-card-icon">&#x1F9CA;</span>
+        <h3>Режим пустого холодильника</h3>
+        <p class="hint" style="margin-bottom:18px;text-align:left;">Перечисли что есть — шеф придумает блюдо без похода в магазин</p>
+        <div class="form-block">
+          <div class="form-label">Продукты через запятую</div>
+          <div class="textarea-wrap">
+            <textarea id="fridge-ingredients" rows="4" placeholder="Яйца, картофель, лук, сметана&#x2026;"></textarea>
+          </div>
+        </div>
+        <div class="form-block">
+          <div class="form-label">Ограничения</div>
+          <div class="pref-chips" id="fridge-prefs">
+            <button class="pref" data-pref="Быстро до 20 мин">&#x26A1; Быстро</button>
+            <button class="pref" data-pref="Без духовки">&#x1F373; Без духовки</button>
+            <button class="pref" data-pref="Минимум посуды">&#x1F963; Мало посуды</button>
+          </div>
+        </div>
+        <button id="btn-rescue-cook" class="primary-btn full-btn" onclick="rescueCook()">&#x1FA84; Спаси ужин!</button>
+      </div>
+      <div id="fridge-text-result" class="step-card" style="display:none;margin-top:16px;">
+        <div class="step-label">Блюдо найдено</div>
+        <div id="fridge-text-content" class="step-text"></div>
+        <button class="primary-btn full-btn" style="margin-top:16px;" onclick="cookFridgeText()">Приготовить &#x2192;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUBSCRIPTION -->
   <div id="screen-subscription" class="screen">
-    <button class="back-btn" onclick="showScreen('home')">← Назад</button>
-    
-    <div class="app-header">
-      <h1>Тарифы</h1>
+    <div class="screen-header">
+      <button class="back-btn" onclick="showScreen('home')">&#x2190; Назад</button>
+      <h2 class="screen-title">Подписка</h2>
+      <p class="screen-sub">Открой все возможности шефа</p>
     </div>
-    
-    <div class="plan-card">
-      <div class="plan-icon">🍳</div>      <h3>FREE</h3>
-      <p class="hint">Базовый тариф</p>
-      
-      <div class="price">0₽</div>
-      
-      <ul>
-        <li>3 бесплатных рецепта</li>
-        <li>Голосовое управление</li>
-        <li>Рецепты на 1 день</li>
-      </ul>
-    </div>
-    
-    <div class="plan-card">
-      <div class="plan-icon">🔥</div>
-      <h3>PRO</h3>
-      <p class="hint">Для тех, кто готовит часто</p>
-      
-      <div class="price">500₽<span>/мес</span></div>
-      
-      <ul>
-        <li>Безлимит рецептов</li>
-        <li>Голосовое управление</li>
-        <li>Рецепты на 7 дней</li>
-        <li>Приоритетная генерация</li>
-      </ul>
-      
-      <button class="primary-btn" onclick="buyPlan('PRO')">
-        💳 Купить PRO
-      </button>
-    </div>
-    
-    <div class="plan-card vip">
-      <div class="plan-icon">💎</div>
-      <h3>VIP</h3>
-      <p class="hint">Премиум-тариф</p>
-      
-      <div class="price" style="background: var(--gradient-gold); color: #2a1810;">
-        800₽<span>/мес</span>
+
+    <div class="plans-wrap">
+      <div class="plan-card">
+        <div class="plan-top">
+          <div>
+            <div class="plan-icon">&#x1F4B3;</div>
+            <h3>PRO</h3>
+          </div>
+          <div class="plan-price">500&#x20BD;<span>/мес</span></div>
+        </div>
+        <ul class="plan-list">
+          <li>Безлимит рецептов</li>
+          <li>Голосовое управление</li>
+          <li>Приоритетная генерация</li>
+          <li class="new-feat">&#x1F6D2; Список покупок</li>
+          <li class="new-feat">&#x1F4D6; История рецептов</li>
+          <li class="new-feat">&#x23F1; Таймер в рецепте</li>
+        </ul>
+        <button class="primary-btn full-btn" onclick="buyPlan('PRO')">Выбрать PRO</button>
       </div>
-      
-      <ul>
-        <li>Всё из PRO</li>
-        <li>ИИ диетолог</li>
-        <li>КБЖУ на порцию</li>
-        <li>Меню на неделю</li>
-        <li>Персональные рекомендации</li>
-      </ul>
-      
-      <button class="primary-btn gold" onclick="buyPlan('VIP')">
-        💎 Купить VIP      </button>
+
+      <div class="plan-card plan-vip">
+        <div class="plan-vip-badge">ЛУЧШИЙ</div>
+        <div class="plan-top">
+          <div>
+            <div class="plan-icon">&#x1F451;</div>
+            <h3>VIP</h3>
+          </div>
+          <div class="plan-price gold-price">800&#x20BD;<span>/мес</span></div>
+        </div>
+        <ul class="plan-list">
+          <li>Безлимит рецептов</li>
+          <li>Голосовое управление</li>
+          <li>Приоритетная генерация</li>
+          <li>&#x1F6D2; Список покупок</li>
+          <li>&#x1F4D6; История рецептов</li>
+          <li>&#x23F1; Таймер в рецепте</li>
+          <li>&#x1F957; ИИ&#x2011;диетолог</li>
+          <li>&#x1F4CA; КБЖУ на порцию</li>
+          <li>&#x1F4C5; Меню на неделю</li>
+          <li class="new-feat">&#x1F4F8; Фото холодильника</li>
+          <li class="new-feat">&#x1F9CA; Что есть в доме</li>
+          <li class="new-feat">&#x1F4E4; Поделиться рецептом</li>
+        </ul>
+        <button class="primary-btn gold-btn full-btn" onclick="buyPlan('VIP')">Выбрать VIP</button>
+      </div>
     </div>
   </div>
-  
-  <!-- ОПЛАТА -->
+
+  <!-- PAYMENT -->
   <div id="screen-payment" class="screen">
-    <button class="back-btn" onclick="showScreen('subscription')">← Назад</button>
-    
-    <div class="app-header">
-      <h1>Оплата</h1>
+    <div class="screen-header">
+      <button class="back-btn" onclick="showScreen('subscription')">&#x2190; Назад</button>
+      <h2 class="screen-title">Оплата</h2>
+      <p class="screen-sub">Перевод через СБП</p>
     </div>
-    
-    <div class="payment-info">
-      <div class="pay-title">Переведите по СБП:</div>
-      <div class="sbp-block">
-        <div>📱 <code id="sbp-phone"></code></div>
-        <div>👤 <span id="sbp-recipient"></span></div>
-        <div class="pay-amount">💰 <span id="pay-amount"></span></div>
+    <div class="form-wrap">
+      <div class="amount-card">
+        <div class="amount-label">К оплате</div>
+        <div class="amount-value"><span id="pay-amount"></span> &#x20BD;</div>
       </div>
-      
-      <div class="form-group">
-        <label>Загрузите скриншот чека</label>
-        <input type="file" id="receipt-file" accept="image/*">
+      <div class="info-card">
+        <div class="info-card-header">Реквизиты СБП</div>
+        <div class="info-row">
+          <span class="info-key">Телефон</span>
+          <span class="info-val" id="sbp-phone">—</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Получатель</span>
+          <span class="info-val" id="sbp-recipient">—</span>
+        </div>
       </div>
-      
-      <button id="btn-upload-receipt" class="primary-btn full">
-        📤 Отправить чек
-      </button>
+      <div class="form-block">
+        <div class="form-label">Скриншот чека</div>
+        <input type="file" id="receipt-file" accept="image/*" class="file-input">
+      </div>
+      <button id="btn-upload-receipt" class="primary-btn gold-btn full-btn">&#x1F4E4; Отправить чек</button>
     </div>
   </div>
-  
-  <!-- МЕНЮ НА НЕДЕЛЮ -->
+
+  <!-- WEEK MENU -->
   <div id="screen-weekmenu" class="screen">
-    <button class="back-btn" onclick="showScreen('profile')">← Назад</button>
-    
-    <div class="app-header">
-      <h1>Меню на неделю</h1>
+    <div class="screen-header">
+      <button class="back-btn" onclick="showScreen('profile')">&#x2190; Назад</button>
+      <h2 class="screen-title">Меню на неделю</h2>
     </div>
-    
-    <div class="vip-feature-card">
-      <div class="vip-icon">🗓</div>
-      <h3>Персональное меню</h3>
-      <p class="hint">ИИ составит меню на 7 дней с учётом твоих предпочтений</p>
-      
-      <div class="form-group">
-        <textarea id="weekmenu-prefs" rows="3" placeholder="Например: без мяса, бюджетно, на 2 человек, похудение..."></textarea>
+    <div class="form-wrap">
+      <div class="vip-card">
+        <span class="vip-card-icon">&#x1F5D3;</span>
+        <h3>Персональное меню</h3>
+        <p class="hint" style="margin-bottom:18px;text-align:left;">ИИ составит меню на 7 дней с учётом твоих предпочтений</p>
+        <div class="form-block">
+          <div class="form-label">Предпочтения и ограничения</div>
+          <div class="textarea-wrap">
+            <textarea id="weekmenu-prefs" rows="3" placeholder="Без мяса, бюджетно, на 2 человек&#x2026;"></textarea>
+          </div>
+        </div>
+        <button id="btn-generate-weekmenu" class="primary-btn gold-btn full-btn">&#x2728; Составить меню</button>
       </div>
-      
-      <button id="btn-generate-weekmenu" class="primary-btn full">
-        ✨ Составить меню      </button>
-    </div>
-    
-    <div id="weekmenu-result" class="weekmenu-container" style="display:none;">
-      <div class="weekmenu-actions">
-        <button id="btn-download-weekmenu" class="primary-btn gold">
-          📄 Скачать PDF
-        </button>
-        <button id="btn-print-weekmenu" class="ghost-btn">
-          🖨 Печать
-        </button>
-        <button id="btn-share-weekmenu" class="ghost-btn">
-          📤 Поделиться
-        </button>
+      <div id="weekmenu-result" class="result-block" style="display:none;">
+        <div class="result-actions">
+          <button id="btn-download-weekmenu" class="primary-btn gold-btn">&#x1F4C4; PDF</button>
+          <button id="btn-print-weekmenu" class="ghost-btn">&#x1F5A8; Печать</button>
+          <button id="btn-share-weekmenu" class="ghost-btn">&#x1F4E4; Поделиться</button>
+        </div>
+        <div id="weekmenu-text" class="result-content"></div>
       </div>
-      <div id="weekmenu-text" class="weekmenu-content"></div>
     </div>
   </div>
-  
-  <!-- ДИЕТОЛОГ -->
+
+  <!-- DIET -->
   <div id="screen-diet" class="screen">
-    <button class="back-btn" onclick="showScreen('profile')">← Назад</button>
-    
-    <div class="app-header">
-      <h1>ИИ Диетолог</h1>
+    <div class="screen-header">
+      <button class="back-btn" onclick="showScreen('profile')">&#x2190; Назад</button>
+      <h2 class="screen-title">ИИ&#x2011;Диетолог</h2>
     </div>
-    
-    <div class="vip-feature-card">
-      <div class="vip-icon">👨‍⚕️</div>
-      <h3>Персональная консультация</h3>
-      <p class="hint">Задай вопрос о питании, КБЖУ, диетах</p>
-      
-      <div class="form-group">
-        <textarea id="diet-question" rows="3" placeholder="Например: Как похудеть без вреда для здоровья?"></textarea>
+    <div class="form-wrap">
+      <div class="vip-card">
+        <span class="vip-card-icon">&#x1F468;&#x200D;&#x2695;&#xFE0F;</span>
+        <h3>Персональная консультация</h3>
+        <p class="hint" style="margin-bottom:18px;text-align:left;">Задай вопрос о питании, КБЖУ, диетах</p>
+        <div class="form-block">
+          <div class="form-label">Твой вопрос</div>
+          <div class="textarea-wrap">
+            <textarea id="diet-question" rows="3" placeholder="Сколько калорий мне нужно в день?"></textarea>
+          </div>
+        </div>
+        <button id="btn-ask-diet" class="primary-btn full-btn">&#x1F4AC; Спросить</button>
       </div>
-      
-      <button id="btn-ask-diet" class="primary-btn full">
-        💬 Спросить
+      <div id="diet-result" class="result-block" style="display:none;">
+        <div id="diet-text" class="result-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFILE -->
+  <div id="screen-profile" class="screen">
+    <div class="screen-header">
+      <button class="back-btn" onclick="showScreen('home')">&#x2190; Назад</button>
+    </div>
+
+    <div class="profile-hero-card">
+      <div class="p-avatar" id="profile-avatar">&#x1F464;</div>
+      <div class="p-name" id="profile-name">Пользователь</div>
+      <div class="p-user" id="profile-username"></div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat-val" id="stat-recipes">0</div>
+        <div class="stat-lbl">Рецептов</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" id="stat-plan">FREE</div>
+        <div class="stat-lbl">Тариф</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" id="stat-expires">—</div>
+        <div class="stat-lbl">До</div>
+      </div>
+    </div>
+
+    <div class="section-label">PRO функции</div>
+    <div class="menu-list">
+      <button class="menu-item" onclick="gatedAction('history','PRO')">
+        <span>&#x1F4D6; История рецептов</span><span class="nav-arrow">&#x203A;</span>
       </button>
     </div>
-    
-    <div id="diet-result" class="weekmenu-container" style="display:none;">
-      <div id="diet-text" class="weekmenu-content"></div>
+
+    <div class="section-label">VIP функции</div>
+    <div class="menu-list">
+      <button class="menu-item" onclick="gatedAction('weekmenu','VIP')">
+        <span>&#x1F4C5; Меню на неделю</span><span class="nav-arrow">&#x203A;</span>
+      </button>
+      <button class="menu-item" onclick="gatedAction('diet','VIP')">
+        <span>&#x1F957; ИИ&#x2011;Диетолог</span><span class="nav-arrow">&#x203A;</span>
+      </button>
+      <button class="menu-item" onclick="gatedAction('fridge','VIP')">
+        <span>&#x1F4F8; Фото холодильника</span><span class="nav-arrow">&#x203A;</span>
+      </button>
+      <button class="menu-item" onclick="gatedAction('fridge-text','VIP')">
+        <span>&#x1F9CA; Что есть в доме?</span><span class="nav-arrow">&#x203A;</span>
+      </button>
+    </div>
+
+    <div class="menu-list" style="margin-top:8px;">
+      <button class="menu-item" onclick="showScreen('subscription')">
+        <span>&#x1F48E; Управление подпиской</span><span class="nav-arrow">&#x203A;</span>
+      </button>
     </div>
   </div>
-  
-  <!-- ПРОФИЛЬ -->
-  <div id="screen-profile" class="screen">
-    <button class="back-btn" onclick="showScreen('home')">← Назад</button>
-        <div class="app-header">
-      <h1>Профиль</h1>
-    </div>
-    
-    <div class="profile-card">
-      <div class="profile-avatar">👤</div>
-      <div class="profile-name" id="profile-name">Пользователь</div>
-      <div class="profile-username" id="profile-username">@username</div>
-      
-      <div class="profile-stats">
-        <div class="stat-item">
-          <div class="stat-value" id="stat-recipes">0</div>
-          <div class="stat-label">Рецептов</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-plan">FREE</div>
-          <div class="stat-label">Тариф</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="stat-expires">—</div>
-          <div class="stat-label">До</div>
-        </div>
-      </div>
-      
-      <div class="profile-actions">
-        <button class="profile-link" onclick="showScreen('subscription')">Тарифы</button>
-        <button class="profile-link" onclick="showScreen('weekmenu')">Меню на неделю</button>
-        <button class="profile-link" onclick="showScreen('diet')">Диетолог</button>
-      </div>
-    </div>
-  </div>
-  
-  <!-- СТАТУС -->
-  <div id="screen-status" class="screen">
-    <button class="back-btn" onclick="showScreen('home')">← Назад</button>
-    
-    <div class="app-header">
-      <h1>Статус</h1>
-    </div>
-    
-    <div class="status-card">
-      <h3>Твой тариф</h3>
-      <div class="stat-value" id="status-plan">FREE</div>
-      <div class="stat-label">Срок действия: <span id="status-expires">—</span></div>
-    </div>
-    
-    <div class="status-card">
-      <h3>Свободные рецепты</h3>
-      <div class="stat-value" id="status-recipes">3 из 3</div>
-      <div class="stat-label">До окончания пробного периода</div>    </div>
-  </div>
-  
-  <script src="/app.js"></script>
+
+<script src="/app.js"></script>
+<script>
+function changePortions(delta) {
+  var inp = document.getElementById("portions");
+  inp.value = Math.max(1, Math.min(20, (parseInt(inp.value) || 2) + delta));
+}
+function gatedAction(screen, required) {
+  var plan = window._userPlan || "FREE";
+  var ok = required === "PRO" ? (plan === "PRO" || plan === "VIP") : (plan === "VIP");
+  if (!ok) { showScreen("subscription"); return; }
+  if (screen === "history") loadHistory();
+  showScreen(screen);
+}
+var RecipeHistory = {
+  KEY: "chef_history",
+  load: function() { try { return JSON.parse(localStorage.getItem(this.KEY) || "[]"); } catch(e) { return []; } },
+  save: function(list) { try { localStorage.setItem(this.KEY, JSON.stringify(list.slice(0,10))); } catch(e) {} },
+  push: function(recipe) {
+    var list = this.load();
+    list.unshift({ title: recipe.title.replace(/<[^>]+>/g,""), ts: Date.now(), fullText: recipe.fullText });
+    this.save(list);
+  }
+};
+function loadHistory() {
+  var list = RecipeHistory.load();
+  var wrap = document.getElementById("history-list");
+  var empty = document.getElementById("history-empty");
+  wrap.innerHTML = "";
+  if (!list.length) { empty.style.display = "block"; return; }
+  empty.style.display = "none";
+  list.forEach(function(item) {
+    var date = new Date(item.ts).toLocaleDateString("ru-RU", { day:"2-digit", month:"short" });
+    var el = document.createElement("div");
+    el.className = "hist-item";
+    el.innerHTML = "<div class='hist-left'><div class='hist-title'>" + item.title + "</div><div class='hist-date'>" + date + "</div></div><button class='hist-btn'>Открыть</button>";
+    el.querySelector("button").onclick = function() {
+      RecipeManager.load({ title: item.title, fullText: item.fullText, steps: item.fullText.split(/\n\s*\n/).filter(function(s){return s.trim().length>10;}), total: 1 });
+      showScreen("recipe");
+    };
+    wrap.appendChild(el);
+  });
+}
+async function showShoppingList() {
+  var plan = window._userPlan || "FREE";
+  if (plan === "FREE") { showScreen("subscription"); return; }
+  if (!RecipeManager.current) return;
+  showScreen("shopping");
+  document.getElementById("shopping-recipe-name").textContent = RecipeManager.current.title.replace(/<[^>]+>/g,"");
+  document.getElementById("shopping-loading").style.display = "flex";
+  document.getElementById("shopping-list-wrap").style.display = "none";
+  try {
+    var res = await fetch("/api/recipe/shopping-list", { method:"POST", headers:{"Content-Type":"application/json","x-telegram-init-data": window._initData||""}, body: JSON.stringify({ recipe: RecipeManager.current.fullText || RecipeManager.current.steps.join("\n") }) });
+    var data = await res.json();
+    var items = data.items || [];
+    window._shoppingList = items;
+    var wrap = document.getElementById("shopping-items");
+    wrap.innerHTML = "";
+    items.forEach(function(item) {
+      var el = document.createElement("div");
+      el.className = "check-item";
+      el.innerHTML = "<label class='check-lbl'><input type='checkbox' onchange='this.closest(".check-item").classList.toggle("done",this.checked)'><span class='checkmark'></span></label><span class='check-name'>" + item.name + "</span><span class='check-amt'>" + (item.amount||"") + "</span>";
+      wrap.appendChild(el);
+    });
+    document.getElementById("shopping-loading").style.display = "none";
+    document.getElementById("shopping-list-wrap").style.display = "block";
+  } catch(e) {
+    document.getElementById("shopping-loading").style.display = "none";
+    document.getElementById("shopping-list-wrap").innerHTML = "<p style='color:var(--text-muted);padding:20px 0'>Не удалось загрузить список</p>";
+    document.getElementById("shopping-list-wrap").style.display = "block";
+  }
+}
+function copyShoppingList() {
+  var items = window._shoppingList || [];
+  var text = "Shopping list:\n\n" + items.map(function(i){ return "- " + i.name + (i.amount ? " — " + i.amount : ""); }).join("\n");
+  if (navigator.clipboard) { navigator.clipboard.writeText(text).then(function(){ var btn=event.currentTarget; btn.textContent="Скопировано!"; setTimeout(function(){ btn.textContent="Скопировать список"; },2000); }); }
+}
+async function shareRecipe() {
+  var plan = window._userPlan || "FREE";
+  if (plan !== "VIP") { showScreen("subscription"); return; }
+  if (!RecipeManager.current) return;
+  var title = RecipeManager.current.title.replace(/<[^>]+>/g,"");
+  var text = title + "\n\nРецепт приготовлен с Шеф-Повар AI";
+  if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.shareMessage) { window.Telegram.WebApp.shareMessage({ text: text }); }
+  else if (navigator.share) { navigator.share({ title: title, text: text }); }
+  else { navigator.clipboard.writeText(text); alert("Рецепт скопирован!"); }
+}
+function previewFridgePhoto(input) {
+  var file = input.files[0]; if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById("fridge-preview").src = e.target.result;
+    document.getElementById("fridge-preview-wrap").style.display = "block";
+    document.getElementById("fridge-upload-ph").style.display = "none";
+    document.getElementById("btn-analyze-fridge").disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+async function analyzeFridge() {
+  var plan = window._userPlan || "FREE";
+  if (plan !== "VIP") { showScreen("subscription"); return; }
+  var file = document.getElementById("fridge-photo").files[0]; if (!file) return;
+  var btn = document.getElementById("btn-analyze-fridge");
+  btn.disabled = true; btn.textContent = "Анализирую...";
+  try {
+    var fd = new FormData(); fd.append("photo", file);
+    var res = await fetch("/api/vip/fridge-scan", { method:"POST", headers:{"x-telegram-init-data": window._initData||""}, body: fd });
+    var data = await res.json();
+    document.getElementById("fridge-text").innerHTML = data.suggestion || "Не удалось определить";
+    document.getElementById("fridge-result").style.display = "block";
+    window._fridgeSuggestion = data.dish;
+  } catch(e) { alert("Ошибка. Попробуй снова."); }
+  finally { btn.disabled = false; btn.textContent = "Что приготовить?"; }
+}
+function cookFromFridgeSuggestion() { if (window._fridgeSuggestion) { document.getElementById("dish-input").value = window._fridgeSuggestion; showScreen("details"); } }
+var _fridgeTextPrefs = [];
+document.querySelectorAll("#fridge-prefs .pref").forEach(function(p) {
+  p.addEventListener("click", function() {
+    p.classList.toggle("active");
+    var v = p.dataset.pref, idx = _fridgeTextPrefs.indexOf(v);
+    if (idx > -1) _fridgeTextPrefs.splice(idx,1); else _fridgeTextPrefs.push(v);
+  });
+});
+async function rescueCook() {
+  var plan = window._userPlan || "FREE";
+  if (plan !== "VIP") { showScreen("subscription"); return; }
+  var ingredients = document.getElementById("fridge-ingredients").value.trim();
+  if (!ingredients) { alert("Введи что есть в холодильнике"); return; }
+  var btn = document.getElementById("btn-rescue-cook");
+  btn.disabled = true; btn.textContent = "Придумываю...";
+  try {
+    var res = await fetch("/api/vip/rescue-cook", { method:"POST", headers:{"Content-Type":"application/json","x-telegram-init-data": window._initData||""}, body: JSON.stringify({ ingredients: ingredients, prefs: _fridgeTextPrefs.join(", ") }) });
+    var data = await res.json();
+    document.getElementById("fridge-text-content").innerHTML = data.suggestion || "Попробуй снова";
+    document.getElementById("fridge-text-result").style.display = "block";
+    window._rescueDish = data.dish;
+  } catch(e) { alert("Ошибка. Попробуй снова."); }
+  finally { btn.disabled = false; btn.textContent = "Спаси ужин!"; }
+}
+function cookFridgeText() { if (window._rescueDish) { document.getElementById("dish-input").value = window._rescueDish; showScreen("details"); } }
+var StepTimer = {
+  interval: null, seconds: 0, running: false,
+  start: function(secs) { this.stop(); this.seconds = secs; this.running = true; this.render(); var self = this; this.interval = setInterval(function(){ if (self.seconds > 0) { self.seconds--; self.render(); } else { self.stop(); self.onDone(); } }, 1000); },
+  stop: function() { clearInterval(this.interval); this.running = false; },
+  render: function() { var m = String(Math.floor(this.seconds/60)).padStart(2,"0"), s = String(this.seconds%60).padStart(2,"0"); var el = document.getElementById("step-timer-display"); if (el) el.textContent = m + ":" + s; var btn = document.getElementById("btn-step-timer"); if (btn) btn.textContent = this.running ? "Стоп" : "Старт"; },
+  onDone: function() { if ("vibrate" in navigator) navigator.vibrate([200,100,200]); alert("Время вышло! Переходи к следующему шагу."); }
+};
+document.addEventListener("click", function(e) {
+  if (e.target.id === "btn-step-timer") {
+    var plan = window._userPlan || "FREE";
+    if (plan === "FREE") { showScreen("subscription"); return; }
+    if (StepTimer.running) { StepTimer.stop(); StepTimer.render(); }
+    else { var mins = parseInt(prompt("Введи время (минут):", "5") || "5"); if (!isNaN(mins) && mins > 0) StepTimer.start(mins * 60); }
+  }
+});
+if (typeof RecipeManager !== "undefined") {
+  var _origLoad = RecipeManager.load.bind(RecipeManager);
+  RecipeManager.load = function(recipe) {
+    _origLoad(recipe);
+    if (recipe && recipe.title) RecipeHistory.push(recipe);
+    var plan = window._userPlan || "FREE";
+    var tw = document.getElementById("step-timer-wrap");
+    if (tw) tw.style.display = (plan !== "FREE") ? "block" : "none";
+    var ls = document.getElementById("lock-shopping"); if (ls) ls.textContent = (plan !== "FREE") ? "" : "lock";
+    var lsh = document.getElementById("lock-share"); if (lsh) lsh.textContent = (plan === "VIP") ? "" : "lock";
+  };
+}
+</script>
 </body>
 </html>
