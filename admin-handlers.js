@@ -6,6 +6,7 @@ module.exports = (bot, pool, ADMIN_ID) => {
   if (!ADMIN_ID) return;
   console.log(`✅ Admin handlers loaded (ID: ${ADMIN_ID})`);
 
+  // ===== ОЖИДАЮЩИЕ ОПЛАТЫ =====
   bot.hears('📋 Ожидающие оплаты', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     try {
@@ -18,16 +19,20 @@ module.exports = (bot, pool, ADMIN_ID) => {
         LIMIT 10
       `);
       
-      if (rows.length === 0) return ctx.reply('✅ Нет ожидающих');
+      if (rows.length === 0) return ctx.reply('✅ Нет ожидающих оплат');
       
-      let m = `📋 <b>Ожидающие (${rows.length}):</b>\n\n`;
+      let msg = `📋 <b>Ожидающие оплаты (${rows.length}):</b>\n\n`;
       rows.forEach(r => {
-        m += `<b>#${r.id}</b> — ${r.first_name} (@${r.username || '-'})\n💎 ${r.plan_type} | 💰 ${r.amount}₽\n\n`;
+        msg += `<b>#${r.id}</b> — ${r.first_name} (@${r.username || '-'})\n`;
+        msg += `💎 ${r.plan_type} | 💰 ${r.amount}₽\n\n`;
       });
-      ctx.reply(m, { parse_mode: 'HTML' });
-    } catch (e) { ctx.reply('❌ ' + e.message); }
+      ctx.reply(msg, { parse_mode: 'HTML' });
+    } catch (e) {
+      ctx.reply('❌ Ошибка: ' + e.message);
+    }
   });
 
+  // ===== СТАТИСТИКА =====
   bot.hears('📊 Статистика', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     try {
@@ -41,14 +46,17 @@ module.exports = (bot, pool, ADMIN_ID) => {
         `📊 <b>Статистика:</b>\n👥 ${s[0].total}\n💎 ${s[0].active}\n💰 ${s[0].revenue || 0}₽`,
         { parse_mode: 'HTML' }
       );
-    } catch (e) { ctx.reply('❌ Ошибка'); }
+    } catch (e) {
+      ctx.reply('❌ Ошибка');    }
   });
 
+  // ===== ПОМОЩЬ =====
   bot.hears('ℹ️ Помощь', (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     ctx.reply('📚 Одобрение оплат — через кнопки под фото чека.\n📥 Экспорт — выгрузка всех пользователей в Excel.');
   });
-  // ===== EXCEL ЭКСПОРТ =====
+
+  // ===== ЭКСПОРТ В EXCEL =====
   bot.hears('📥 Экспорт подписок', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     try {
@@ -88,15 +96,15 @@ module.exports = (bot, pool, ADMIN_ID) => {
           first_name: r.first_name || '-',
           plan_type: r.plan_type || 'FREE',
           is_active: r.is_active ? '✅' : '❌',
-          expires_at: r.expires_at ? new Date(r.expires_at).toLocaleDateString('ru-RU') : '-',
-          created_at: new Date(r.created_at).toLocaleString('ru-RU')
+          expires_at: r.expires_at ? new Date(r.expires_at).toLocaleDateString('ru-RU') : '-',          created_at: new Date(r.created_at).toLocaleString('ru-RU')
         });
       });
       
       const buffer = await workbook.xlsx.writeBuffer();
       const fileName = `users_${Date.now()}.xlsx`;
       const filePath = path.join(__dirname, fileName);
-            fs.writeFileSync(filePath, buffer);
+      
+      fs.writeFileSync(filePath, buffer);
       
       await ctx.replyWithDocument(
         { source: filePath, filename: `users_${new Date().toLocaleDateString('ru-RU')}.xlsx` },
