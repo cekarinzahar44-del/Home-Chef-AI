@@ -91,12 +91,39 @@ global.sendPhotoToAdmin = async (filePath, caption, keyboard) => {
 // /start
 bot.start(async (ctx) => {
   if (ctx.from.id === ADMIN_ID) {
-    return require('./admin-handlers')(ctx, pool, ADMIN_ID);
+    // Показываем админ-панель
+    const { Markup } = require('telegraf');
+    try {
+      const { rows: stats } = await pool.query(`
+        SELECT 
+          (SELECT COUNT(*) FROM users) as users,          (SELECT COUNT(*) FROM subscriptions WHERE is_active=TRUE) as subs,
+          (SELECT COUNT(*) FROM payments WHERE status='pending') as pending
+      `);
+      const msg = `👨‍💼 <b>Панель администратора</b>\n\n` +
+        `📊 <b>Статистика:</b>\n` +
+        `• 👥 Пользователей: ${stats[0].users}\n` +
+        `• 💎 Активных подписок: ${stats[0].subs}\n` +
+        `• ⏳ Ожидающих оплат: ${stats[0].pending}\n\n` +
+        `💳 Одобрение оплат — через кнопки под фото чека в этом чате.`;
+
+      await ctx.reply(msg, {
+        parse_mode: 'HTML',
+        reply_markup: Markup.keyboard([
+          ['📋 Ожидающие оплаты', '📥 Экспорт подписок'],
+          ['📊 Статистика', 'ℹ️ Помощь']
+        ]).resize()
+      });
+    } catch (e) {
+      ctx.reply('❌ Ошибка: ' + e.message);
+    }
+    return;
   }
 
+  // Обычный пользователь
   await pool.query(
     `INSERT INTO users (tg_id, username, first_name, free_recipes_used) 
-     VALUES ($1,$2,$3,0) ON CONFLICT (tg_id) DO NOTHING`,    [ctx.from.id, ctx.from.username, ctx.from.first_name]
+     VALUES ($1,$2,$3,0) ON CONFLICT (tg_id) DO NOTHING`,
+    [ctx.from.id, ctx.from.username, ctx.from.first_name]
   );
 
   await ctx.reply(
@@ -118,8 +145,7 @@ bot.start(async (ctx) => {
 async function start() {
   try {
     await pool.query('SELECT 1');
-    console.log('✅ PostgreSQL подключен');
-  } catch (err) {
+    console.log('✅ PostgreSQL подключен');  } catch (err) {
     console.error('❌ БД ошибка:', err.message);
     process.exit(1);
   }
@@ -145,7 +171,8 @@ async function start() {
     `CREATE TABLE IF NOT EXISTS payments (
       id SERIAL PRIMARY KEY,
       user_id BIGINT REFERENCES users(tg_id),
-      amount INTEGER NOT NULL,      receipt_file_path TEXT,
+      amount INTEGER NOT NULL,
+      receipt_file_path TEXT,
       status VARCHAR(20) DEFAULT 'pending',
       plan_type VARCHAR(10) NOT NULL,
       created_at TIMESTAMP DEFAULT NOW()
@@ -167,8 +194,7 @@ async function start() {
         `SELECT u.tg_id, s.expires_at, s.plan_type 
          FROM subscriptions s 
          JOIN users u ON s.user_id = u.tg_id 
-         WHERE s.is_active = TRUE AND s.expires_at BETWEEN NOW() AND NOW() + INTERVAL '3 days'`
-      );
+         WHERE s.is_active = TRUE AND s.expires_at BETWEEN NOW() AND NOW() + INTERVAL '3 days'`      );
       for (const s of rows) {
         const days = Math.ceil((new Date(s.expires_at) - new Date()) / 86400000);
         await bot.telegram.sendMessage(s.tg_id,
@@ -194,7 +220,8 @@ async function start() {
   if (MINI_APP_URL) {
     bot.telegram.setChatMenuButton({
       menu_button: {
-        type: 'web_app',        text: '🍳 Шеф-Повар',
+        type: 'web_app',
+        text: '🍳 Шеф-Повар',
         web_app: { url: MINI_APP_URL }
       }
     }).catch(() => {});
