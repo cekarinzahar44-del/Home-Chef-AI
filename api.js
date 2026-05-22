@@ -1,32 +1,30 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 const { validateTelegramAuth } = require('./auth');
 const { callGigaChat } = require('./gigachat');
 const { transcribeVoice } = require('./stt');
 
 const router = express.Router();
 
-// ===== КОНФИГ =====
-const FREE_LIMIT    = 3;
-const PRO_PRICE     = 500;
-const VIP_PRICE     = 800;
-const SBP_PHONE     = process.env.SBP_PHONE     || '+79022231321';
+const FREE_LIMIT = 3;
+const PRO_PRICE = 500;
+const VIP_PRICE = 800;
+const SBP_PHONE = process.env.SBP_PHONE || '+79022231321';
 const SBP_RECIPIENT = process.env.SBP_RECIPIENT || 'Ермачкова Алина В.';
 
-// ===== MULTER (чеки и фото холодильника — на диск) =====
+// Multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads')),
-  filename:    (req, file, cb) => {
+  filename: (req, file, cb) => {
     const ext = path.extname(file.originalname) || '.jpg';
-    cb(null, `${file.fieldname}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
+    cb(null, `receipt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
   }
 });
-const upload      = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 const uploadAudio = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-// ===== AUTH MIDDLEWARE =====
+// Auth middleware
 router.use((req, res, next) => {
   const initData = req.header('x-telegram-init-data');
   if (!initData) return res.status(401).json({ error: 'No initData' });
@@ -37,7 +35,6 @@ router.use((req, res, next) => {
 });
 
 // ===== HELPERS =====
-
 function detectRequestType(text) {
   const lower = text.toLowerCase();
   const keywords = [
@@ -50,8 +47,7 @@ function detectRequestType(text) {
   return 'dish';
 }
 
-function buildPrompt(requestType, ingredients, details, planType) {
-  const isVIP = planType === 'VIP';
+function buildPrompt(requestType, ingredients, details, planType) {  const isVIP = planType === 'VIP';
   const system = `Ты элитный ИИ Шеф-Повар. Создавай подробные рецепты.
 Структура: 🍽 Название, 📝 Описание, Ингредиенты, Время, 🔥 Метод, 👨‍🍳 Шаги, Советы, 🍷 Напитки.
 Каждый шаг: ⏱ время | температура | действия.
@@ -79,83 +75,69 @@ function cleanHtml(text) {
     .replace(/&nbsp;/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-  const headings = ['🍽','📝','🔥','👨‍🍳','🍷','📊','⏱','💡','🔍','🛒','📅','💪'];
+  // Жирные заголовки с эмодзи
+  const headings = ['🍽', '📝', '🔥', '👨‍🍳', '🍷', '📊', '⏱', '💡'];
   headings.forEach(emoji => {
     const escaped = emoji.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    safe = safe.replace(new RegExp(`(${escaped}[^\\n]+)`, 'g'), '<b>$1</b>');
+    const regex = new RegExp(`(${escaped}[^\\n]+)`, 'g');
+    safe = safe.replace(regex, '<b>$1</b>');
   });
-  const open  = (safe.match(/<b>/g)  || []).length;
+  // Проверка баланса тегов
+  const open = (safe.match(/<b>/g) || []).length;
   const close = (safe.match(/<\/b>/g) || []).length;
   if (open !== close) return safe.replace(/<\/?b>/g, '');
   return safe;
 }
 
-// Проверка подписки — возвращает объект подписки или null
-async function getActiveSub(tgId) {
-  const { rows: [sub] } = await global.pool.query(
-    `SELECT * FROM subscriptions
-     WHERE user_id=$1 AND is_active=TRUE AND expires_at>NOW()
-     LIMIT 1`,
-    [tgId]
-  );
-  return sub || null;
-}
-
-// ================================================================
-//  STATUS
-// ================================================================
+// ===== STATUS =====
 router.get('/recipe/status', async (req, res) => {
   try {
     const tgId = req.telegramUser.id;
-    const sub  = await getActiveSub(tgId);
-    const { rows: [user] } = await global.pool.query(
-      `SELECT * FROM users WHERE tg_id=$1`, [tgId]
-    );
-    // Сохраняем план в window для фронтенда (передаём в ответ)
+    const { rows: [sub] } = await global.pool.query(
+      `SELECT * FROM subscriptions WHERE user_id=$1 AND is_active=TRUE AND expires_at>NOW() LIMIT 1`,
+      [tgId]
+    );    const { rows: [user] } = await global.pool.query(`SELECT * FROM users WHERE tg_id=$1`, [tgId]);
     res.json({
       subscription: sub || null,
-      planType:     sub?.plan_type || 'FREE',
-      freeUsed:     user?.free_recipes_used || 0,
-      freeLimit:    FREE_LIMIT,
-      prices:       { PRO: PRO_PRICE, VIP: VIP_PRICE }
+      freeUsed: user?.free_recipes_used || 0,
+      freeLimit: FREE_LIMIT,
+      prices: { PRO: PRO_PRICE, VIP: VIP_PRICE }
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// ================================================================
-//  GENERATE RECIPE
-// ================================================================
+// ===== GENERATE RECIPE =====
 router.post('/recipe/generate', async (req, res) => {
   try {
     const tgId = req.telegramUser.id;
     const { ingredients, details } = req.body;
     if (!ingredients) return res.status(400).json({ error: 'No ingredients' });
 
-    // Авторегистрация пользователя
     await global.pool.query(
       `INSERT INTO users (tg_id, username, first_name, free_recipes_used)
        VALUES ($1,$2,$3,0) ON CONFLICT (tg_id) DO NOTHING`,
       [tgId, req.telegramUser.username, req.telegramUser.first_name]
     );
 
-    const sub  = await getActiveSub(tgId);
-    const { rows: [user] } = await global.pool.query(
-      `SELECT * FROM users WHERE tg_id=$1`, [tgId]
+    const { rows: [sub] } = await global.pool.query(
+      `SELECT * FROM subscriptions WHERE user_id=$1 AND is_active=TRUE AND expires_at>NOW() LIMIT 1`,
+      [tgId]
     );
+    const { rows: [user] } = await global.pool.query(`SELECT * FROM users WHERE tg_id=$1`, [tgId]);
 
     if (!sub && user.free_recipes_used >= FREE_LIMIT) {
       return res.status(403).json({
-        error:   'limit_reached',
+        error: 'limit_reached',
         message: 'Лимит исчерпан',
-        prices:  { PRO: PRO_PRICE, VIP: VIP_PRICE }
+        prices: { PRO: PRO_PRICE, VIP: VIP_PRICE }
       });
     }
 
-    const planType    = sub?.plan_type || 'FREE';
+    const planType = sub?.plan_type || 'FREE';
     const requestType = detectRequestType(ingredients);
-    const prompt      = buildPrompt(requestType, ingredients, details, planType);
+    const prompt = buildPrompt(requestType, ingredients, details, planType);
 
     let recipe = await callGigaChat(prompt.system, prompt.user);
     recipe = cleanHtml(recipe);
@@ -163,16 +145,15 @@ router.post('/recipe/generate', async (req, res) => {
 
     if (!sub) {
       await global.pool.query(
-        `UPDATE users SET free_recipes_used = free_recipes_used + 1 WHERE tg_id=$1`,
-        [tgId]
+        `UPDATE users SET free_recipes_used = free_recipes_used + 1 WHERE tg_id=$1`,        [tgId]
       );
     }
 
     res.json({
-      title:    (recipe.match(/🍽 [^\n]+/) || ['Твой рецепт'])[0],
+      title: (recipe.match(/🍽 [^\n]+/) || ['Твой рецепт'])[0],
       fullText: recipe,
       steps,
-      total:    steps.length
+      total: steps.length
     });
   } catch (e) {
     console.error('Recipe error:', e);
@@ -180,52 +161,7 @@ router.post('/recipe/generate', async (req, res) => {
   }
 });
 
-// ================================================================
-//  PRO: СПИСОК ПОКУПОК
-// ================================================================
-router.post('/recipe/shopping-list', async (req, res) => {
-  try {
-    const tgId = req.telegramUser.id;
-    const { recipe } = req.body;
-    if (!recipe) return res.status(400).json({ error: 'No recipe text' });
-
-    const sub = await getActiveSub(tgId);
-    if (!sub) return res.status(403).json({ error: 'PRO required' });
-
-    const system = `Ты помощник шеф-повара. Извлеки из рецепта полный список ингредиентов.
-Ответь ТОЛЬКО валидным JSON массивом — без пояснений, без markdown-блоков, без текста до и после:
-[{"name":"Название продукта","amount":"Количество с единицей измерения"},...]
-Группируй похожие продукты. Указывай точное количество. Не добавляй продукты которых нет в рецепте.`;
-
-    const raw = await callGigaChat(system, `Рецепт:\n${recipe}`);
-
-    let items = [];
-    try {
-      const clean = raw.replace(/```json|```/g, '').trim();
-      items = JSON.parse(clean);
-    } catch {
-      // Fallback: парсим построчно если JSON не вернулся
-      items = raw.split('\n')
-        .filter(l => l.trim().length > 2)
-        .map(l => {
-          const stripped = l.replace(/^[-•*\d.]+\s*/, '').trim();
-          const [name, amount] = stripped.split(/\s*[—:–]\s*/).map(s => s.trim());
-          return { name: name || stripped, amount: amount || '' };
-        })
-        .filter(i => i.name.length > 1)
-        .slice(0, 25);
-    }
-
-    res.json({ items: Array.isArray(items) ? items.slice(0, 25) : [] });
-  } catch (e) {
-    console.error('Shopping list error:', e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ================================================================
-//  STT — распознавание голоса
-// ================================================================
+// ===== STT =====
 router.post('/stt/recognize', uploadAudio.single('audio'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No audio' });
@@ -236,26 +172,22 @@ router.post('/stt/recognize', uploadAudio.single('audio'), async (req, res) => {
   }
 });
 
-// ================================================================
-//  PAYMENT INFO
-// ================================================================
+// ===== PAYMENT INFO =====
 router.get('/payment/info', (req, res) => {
   res.json({
-    sbpPhone:  SBP_PHONE,
+    sbpPhone: SBP_PHONE,
     recipient: SBP_RECIPIENT,
-    prices:    { PRO: PRO_PRICE, VIP: VIP_PRICE }
+    prices: { PRO: PRO_PRICE, VIP: VIP_PRICE }
   });
 });
 
-// ================================================================
-//  UPLOAD RECEIPT
-// ================================================================
+// ===== UPLOAD RECEIPT =====
 router.post('/payment/upload', upload.single('receipt'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file' });
-    const tgId        = req.telegramUser.id;
+    const tgId = req.telegramUser.id;
     const { planType } = req.body;
-    const amount      = planType === 'VIP' ? VIP_PRICE : PRO_PRICE;
+    const amount = planType === 'VIP' ? VIP_PRICE : PRO_PRICE;
     const receiptPath = `/uploads/${req.file.filename}`;
 
     const { rows: [payment] } = await global.pool.query(
@@ -263,19 +195,18 @@ router.post('/payment/upload', upload.single('receipt'), async (req, res) => {
        VALUES ($1,$2,$3,'pending',$4) RETURNING id`,
       [tgId, amount, receiptPath, planType]
     );
-    const { rows: [user] } = await global.pool.query(
-      `SELECT * FROM users WHERE tg_id=$1`, [tgId]
-    );
+    const { rows: [user] } = await global.pool.query(`SELECT * FROM users WHERE tg_id=$1`, [tgId]);
 
     if (global.sendPhotoToAdmin) {
-      const caption  = `🚨 Заявка #${payment.id}\n👤 ${user?.first_name || 'user'} (@${user?.username || '-'})\n💎 ${planType} | 💰 ${amount}₽`;
+      const caption = `🚨 Заявка #${payment.id}\n👤 ${user?.first_name || 'user'} (@${user?.username || '-'})\n💎 ${planType} | 💰 ${amount}₽`;
       const keyboard = {
         inline_keyboard: [
           [{ text: '✅ Одобрить', callback_data: `approve_${payment.id}` }],
           [{ text: '❌ Отклонить', callback_data: `reject_${payment.id}` }]
         ]
       };
-      await global.sendPhotoToAdmin(path.join(__dirname, req.file.path), caption, keyboard);
+      const fullPath = path.join(__dirname, req.file.path);
+      await global.sendPhotoToAdmin(fullPath, caption, keyboard);
     }
 
     res.json({ paymentId: payment.id, status: 'pending' });
@@ -285,38 +216,36 @@ router.post('/payment/upload', upload.single('receipt'), async (req, res) => {
   }
 });
 
-// ================================================================
-//  PROFILE
-// ================================================================
+// ===== PROFILE =====
 router.get('/user/profile', async (req, res) => {
   try {
     const tgId = req.telegramUser.id;
-    const { rows: [user] } = await global.pool.query(
-      `SELECT * FROM users WHERE tg_id=$1`, [tgId]
+    const { rows: [user] } = await global.pool.query(`SELECT * FROM users WHERE tg_id=$1`, [tgId]);
+    const { rows: [sub] } = await global.pool.query(
+      `SELECT * FROM subscriptions WHERE user_id=$1 AND is_active=TRUE AND expires_at>NOW() LIMIT 1`,
+      [tgId]
     );
-    const sub = await getActiveSub(tgId);
     res.json({ user, subscription: sub || null });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// ================================================================
-//  FULL PROFILE (с историей оплат)
-// ================================================================
+// ===== FULL PROFILE (с историей оплат) =====
 router.get('/user/fullprofile', async (req, res) => {
   try {
     const tgId = req.telegramUser.id;
-    const { rows: [user] } = await global.pool.query(
-      `SELECT * FROM users WHERE tg_id=$1`, [tgId]
+    const { rows: [user] } = await global.pool.query(`SELECT * FROM users WHERE tg_id=$1`, [tgId]);
+    const { rows: [sub] } = await global.pool.query(
+      `SELECT * FROM subscriptions WHERE user_id=$1 AND is_active=TRUE AND expires_at>NOW() LIMIT 1`,
+      [tgId]
     );
-    const sub = await getActiveSub(tgId);
-    const { rows: [{ count }] } = await global.pool.query(
-      `SELECT COUNT(*) FROM payments WHERE user_id=$1 AND status='approved'`, [tgId]
-    );
-    res.json({
+    const { rows: [{count}] } = await global.pool.query(
+      `SELECT COUNT(*) FROM payments WHERE user_id=$1 AND status='approved'`,
+      [tgId]
+    );    res.json({
       user,
-      subscription:     sub || null,
+      subscription: sub || null,
       approvedPayments: parseInt(count) || 0
     });
   } catch (e) {
@@ -324,54 +253,46 @@ router.get('/user/fullprofile', async (req, res) => {
   }
 });
 
-// ================================================================
-//  VIP: МЕНЮ НА НЕДЕЛЮ
-// ================================================================
+// ===== VIP: WEEK MENU =====
 router.post('/vip/weekmenu', async (req, res) => {
   try {
-    const tgId  = req.telegramUser.id;
+    const tgId = req.telegramUser.id;
     const { prefs } = req.body;
-    const sub   = await getActiveSub(tgId);
+    const { rows: [sub] } = await global.pool.query(
+      `SELECT * FROM subscriptions WHERE user_id=$1 AND is_active=TRUE AND expires_at>NOW() LIMIT 1`,
+      [tgId]
+    );
     if (!sub || sub.plan_type !== 'VIP') {
       return res.status(403).json({ error: 'Только для VIP' });
     }
     const system = `Ты диетолог и шеф-повар. Составь подробное меню на 7 дней.
-Структура: для каждого дня — завтрак, обед, ужин, перекус. Укажи примерное КБЖУ на день.
-Используй эмодзи для структуры. Не используй HTML.`;
-    const menu = await callGigaChat(system, `Предпочтения: ${prefs || 'нет'}`);
+Структура: для каждого дня — завтрак, обед, ужин, перекус. Укажи примерное КБЖУ на день.`;
+    const user = `Предпочтения: ${prefs || 'нет'}`;
+    const menu = await callGigaChat(system, user);
     res.json({ menu: cleanHtml(menu) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// ================================================================
-//  VIP: ИИ-ДИЕТОЛОГ
-// ================================================================
+// ===== VIP: DIET CONSULTATION =====
 router.post('/vip/diet', async (req, res) => {
   try {
-    const tgId  = req.telegramUser.id;
+    const tgId = req.telegramUser.id;
     const { question } = req.body;
-    const sub   = await getActiveSub(tgId);
+    const { rows: [sub] } = await global.pool.query(
+      `SELECT * FROM subscriptions WHERE user_id=$1 AND is_active=TRUE AND expires_at>NOW() LIMIT 1`,
+      [tgId]
+    );
     if (!sub || sub.plan_type !== 'VIP') {
       return res.status(403).json({ error: 'Только для VIP' });
     }
     const system = `Ты профессиональный диетолог с 20-летним опытом.
-Отвечай подробно, научно обоснованно, но простым языком.
-Используй структуру с эмодзи. Не используй HTML.`;
+Отвечай подробно, научно обоснованно, но простым языком. Используй структуру с эмодзи.`;
     const answer = await callGigaChat(system, question);
     res.json({ answer: cleanHtml(answer) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+    res.status(500).json({ error: e.message });  }
 });
 
-// ================================================================
-//  VIP: АНАЛИЗ ФОТО ХОЛОДИЛЬНИКА
-// ================================================================
-router.post('/vip/fridge-scan', upload.single('photo'), async (req, res) => {
-  try {
-    const tgId = req.telegramUser.id;
-    const sub  = await getActiveSub(tgId);
-    if (!sub || sub.plan_type !== 'VIP') {
-      return res.status(403).json
+module.exports = router;
