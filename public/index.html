@@ -517,16 +517,7 @@ function gatedAction(screen, required) {
   if (screen === "history") loadHistory();
   showScreen(screen);
 }
-var RecipeHistory = {
-  KEY: "chef_history",
-  load: function() { try { return JSON.parse(localStorage.getItem(this.KEY) || "[]"); } catch(e) { return []; } },
-  save: function(list) { try { localStorage.setItem(this.KEY, JSON.stringify(list.slice(0,10))); } catch(e) {} },
-  push: function(recipe) {
-    var list = this.load();
-    list.unshift({ title: recipe.title.replace(/<[^>]+>/g,""), ts: Date.now(), fullText: recipe.fullText });
-    this.save(list);
-  }
-};
+/* RecipeHistory объявлен в app.js */
 function loadHistory() {
   var list = RecipeHistory.load();
   var wrap = document.getElementById("history-list");
@@ -564,7 +555,15 @@ async function showShoppingList() {
     items.forEach(function(item) {
       var el = document.createElement("div");
       el.className = "check-item";
-      el.innerHTML = "<label class='check-lbl'><input type='checkbox' onchange='this.closest(".check-item").classList.toggle("done",this.checked)'><span class='checkmark'></span></label><span class='check-name'>" + item.name + "</span><span class='check-amt'>" + (item.amount||"") + "</span>";
+      var chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.addEventListener('change', function(){ this.closest('.check-item').classList.toggle('done', this.checked); });
+      var lbl = document.createElement('label'); lbl.className = 'check-lbl';
+      var mark = document.createElement('span'); mark.className = 'checkmark';
+      lbl.appendChild(chk); lbl.appendChild(mark);
+      var nm = document.createElement('span'); nm.className = 'check-name'; nm.textContent = item.name;
+      var amt = document.createElement('span'); amt.className = 'check-amt'; amt.textContent = item.amount || '';
+      el.appendChild(lbl); el.appendChild(nm); el.appendChild(amt);
       wrap.appendChild(el);
     });
     document.getElementById("shopping-loading").style.display = "none";
@@ -658,18 +657,7 @@ document.addEventListener("click", function(e) {
     else { var mins = parseInt(prompt("Введи время (минут):", "5") || "5"); if (!isNaN(mins) && mins > 0) StepTimer.start(mins * 60); }
   }
 });
-if (typeof RecipeManager !== "undefined") {
-  var _origLoad = RecipeManager.load.bind(RecipeManager);
-  RecipeManager.load = function(recipe) {
-    _origLoad(recipe);
-    if (recipe && recipe.title) RecipeHistory.push(recipe);
-    var plan = window._userPlan || "FREE";
-    var tw = document.getElementById("step-timer-wrap");
-    if (tw) tw.style.display = (plan !== "FREE") ? "block" : "none";
-    var ls = document.getElementById("lock-shopping"); if (ls) ls.textContent = (plan !== "FREE") ? "" : "lock";
-    var lsh = document.getElementById("lock-share"); if (lsh) lsh.textContent = (plan === "VIP") ? "" : "lock";
-  };
-}
+/* RecipeManager.load расширен в app.js */
 </script>
 </body>
 </html>
