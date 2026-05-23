@@ -462,113 +462,73 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
   const btn = document.getElementById('btn-download-weekmenu');
   const originalText = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<span class="loading-spinner"></span> Генерируем PDF...';
-  
+  btn.innerHTML = '⏳ Генерируем PDF...';
+
   try {
     const content = document.getElementById('weekmenu-text').innerHTML;
-    
-    // Создаем HTML-документ для PDF
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Меню на неделю</title>
-        <style>
-          body { 
-            font-family: Arial, sans-serif; 
-            line-height: 1.6; 
-            color: #333; 
-            max-width: 800px; 
-            margin: 0 auto; 
-            padding: 20px;
-          }
-          h1 { 
-            color: #667eea; 
-            text-align: center; 
-            margin-bottom: 30px;
-            font-size: 28px;
-          }
-          .day { 
-            margin-bottom: 30px; 
-            border-bottom: 1px solid #eee; 
-            padding-bottom: 20px;
-          }
-          .meal { 
-            margin: 15px 0; 
-          }
-          .meal-title { 
-            font-weight: bold; 
-            color: #667eea; 
-            font-size: 22px;
-            margin-bottom: 10px;
-          }
-          .ingredients { 
-            margin-left: 20px; 
-            margin-bottom: 10px;
-          }          .steps { 
-            margin-left: 20px; 
-            margin-bottom: 10px;
-          }
-          .kcal { 
-            color: #10b981; 
-            font-weight: bold; 
-          }
-          .header {
-            text-align: center;
-            padding: 20px 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 10px;
-            margin-bottom: 20px;
-          }
-          .header h1 {
-            margin: 0;
-          }
-          .header p {
-            margin-top: 5px;
-            opacity: 0.9;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>Меню на неделю</h1>
-          <p>Составлено для вас с учетом ваших предпочтений</p>
-        </div>
-        ${content}
-      </body>
-      </html>
-    `;
-    
-    // Конфигурация PDF
+    const filename = `menu-${new Date().toISOString().split('T')[0]}.pdf`;
+
+    const htmlContent = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Меню на неделю</title>
+<style>
+  body { font-family: Arial, sans-serif; line-height: 1.7; color: #2c2420; max-width: 800px; margin: 0 auto; padding: 24px; }
+  .header { text-align:center; padding: 24px; background: linear-gradient(135deg,#d98f78,#c4735a); color:#fff; border-radius:12px; margin-bottom:24px; }
+  .header h1 { margin:0; font-size:26px; }
+  .header p { margin:6px 0 0; opacity:0.9; font-size:14px; }
+  b { color: #c4735a; }
+  br { line-height: 2; }
+</style></head>
+<body>
+  <div class="header">
+    <h1>Меню на неделю</h1>
+    <p>Составлено Шеф-Повар AI · ${new Date().toLocaleDateString('ru-RU', {day:'numeric',month:'long',year:'numeric'})}</p>
+  </div>
+  ${content}
+</body></html>`;
+
     const opt = {
       margin: [10, 10, 10, 10],
-      filename: `меню-на-неделю-${new Date().toISOString().split('T')[0]}.pdf`,
+      filename,
       image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { 
-        scale: 2, 
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      },
-      jsPDF: { 
-        unit: 'mm', 
-        format: 'a4', 
-        orientation: 'portrait'
-      },
+      html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
-    
-    // Генерация PDF — правильное использование html2pdf.js
-    await html2pdf().set(opt).from(htmlContent).save();
-    
+
+    // Генерируем Blob, затем скачиваем через <a> — работает в Telegram WebView
+    const pdfBlob = await html2pdf().set(opt).from(htmlContent).outputPdf('blob');
+    const url = URL.createObjectURL(pdfBlob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+
+    // Небольшая задержка перед очисткой
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 3000);
+
     tg?.HapticFeedback?.notificationOccurred('success');
-    toast('📄 PDF сохранён!');
-    
+    toast('📄 PDF готов — проверь загрузки!');
+
   } catch (e) {
     console.error('PDF error:', e);
-    alert('Ошибка создания PDF: ' + e.message);
+    // Fallback: открываем печать браузера как запасной вариант
+    const content = document.getElementById('weekmenu-text').innerHTML;
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Меню на неделю</title>
+      <style>body{font-family:Arial,sans-serif;padding:20px;line-height:1.7;color:#333;}b{color:#c4735a;}</style>
+      </head><body>${content}<script>window.onload=function(){window.print();}<\/script></body></html>`);
+      win.document.close();
+      toast('🖨 Используй «Сохранить как PDF» в меню печати');
+    } else {
+      alert('Не удалось создать PDF. Попробуй кнопку «Печать».');
+    }
   } finally {
     btn.disabled = false;
     btn.innerHTML = originalText;
