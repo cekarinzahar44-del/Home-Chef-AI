@@ -545,7 +545,7 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
     const opt = {
       margin: [10, 10, 10, 10],
       filename: `меню-на-неделю-${new Date().toISOString().split('T')[0]}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
+      image: { type: 'jpeg', quality: 0.95 },
       html2canvas: { 
         scale: 2, 
         useCORS: true,
@@ -555,16 +555,13 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
       jsPDF: { 
         unit: 'mm', 
         format: 'a4', 
-        orientation: 'portrait'       },
+        orientation: 'portrait'
+      },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
     
-    // Генерация PDF
-    const { jsPDF } = html2pdf();
-    const pdf = new jsPDF(opt.jsPDF);
-    
-    // Добавляем HTML в PDF
-    await html2pdf().from(htmlContent).set(opt).toPdf().get('pdf').save(opt.filename);
+    // Генерация PDF — правильное использование html2pdf.js
+    await html2pdf().set(opt).from(htmlContent).save();
     
     tg?.HapticFeedback?.notificationOccurred('success');
     toast('📄 PDF сохранён!');
