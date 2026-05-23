@@ -594,6 +594,11 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
   btn.innerHTML = '⏳ Создаём картинку...';
 
   try {
+    // Проверяем наличие html2canvas
+    if (typeof html2canvas === 'undefined') {
+      throw new Error('Библиотека не загружена. Попробуй кнопку «Печать» → «Сохранить как PDF»');
+    }
+
     // Создаём временный div с меню для рендеринга
     const rawText = WeekMenu._rawText || document.getElementById('weekmenu-text').innerText || '';
     const date = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -668,7 +673,22 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
 
   } catch (e) {
     console.error('Image error:', e);
-    alert('Ошибка: ' + e.message);
+    // Fallback — скачиваем как текстовый файл, работает везде
+    try {
+      const raw = WeekMenu._rawText || '';
+      const text = raw.replace(/<[^>]+>/g, '').trim();
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `menu-${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+      toast('📄 Сохранено как текстовый файл!');
+    } catch(e2) {
+      alert('Не удалось сохранить. Используй кнопку «Печать».');
+    }
   } finally {
     btn.disabled = false;
     btn.innerHTML = originalText;
