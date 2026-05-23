@@ -255,21 +255,16 @@ function showScreen(name) {
 
 // ===== INIT =====
 async function init() {
-  // Глобально для новых фич (список покупок, фото холодильника и т.д.)
   window._initData = initData;
-
   try {
     const status = await API.getStatus();
     const badge = document.getElementById('user-badge');
     const freeCount = document.getElementById('free-count');
-
-    // Устанавливаем план глобально — нужен для замков на кнопках PRO/VIP
     window._userPlan = status.planType || (status.subscription ? status.subscription.plan_type : 'FREE');
-
     if (status.subscription) {
-      const planType = status.subscription.plan_type;
-      badge.textContent = planType;
-      badge.className = 'badge ' + planType;
+      const pt = status.subscription.plan_type;
+      badge.textContent = pt;
+      badge.className = 'badge ' + pt;
       freeCount.textContent = '✨ Безлимит активен';
     } else {
       badge.textContent = 'FREE';
@@ -489,7 +484,7 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
             padding: 20px;
           }
           h1 { 
-            color: #c4735a; 
+            color: #667eea; 
             text-align: center; 
             margin-bottom: 30px;
             font-size: 28px;
@@ -504,7 +499,7 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
           }
           .meal-title { 
             font-weight: bold; 
-            color: #c4735a; 
+            color: #667eea; 
             font-size: 22px;
             margin-bottom: 10px;
           }
@@ -522,7 +517,7 @@ document.getElementById('btn-download-weekmenu').addEventListener('click', async
           .header {
             text-align: center;
             padding: 20px 0;
-            background: linear-gradient(135deg, #d98f78 0%, #c4735a 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border-radius: 10px;
             margin-bottom: 20px;
@@ -605,7 +600,7 @@ document.getElementById('btn-print-weekmenu').addEventListener('click', () => {
         .weekmenu-header-card {
           text-align: center;
           padding: 30px;
-          background: linear-gradient(135deg, #d98f78 0%, #c4735a 100%);
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           color: white;
           border-radius: 16px;
           margin-bottom: 30px;
@@ -614,7 +609,7 @@ document.getElementById('btn-print-weekmenu').addEventListener('click', () => {
         .weekmenu-subtitle { font-size: 16px; opacity: 0.9; margin-top: 8px; }
         .weekmenu-date { font-size: 14px; opacity: 0.8; margin-top: 8px; }
         .week-day-header {
-          background: linear-gradient(135deg, #d98f78 0%, #c4735a 100%);
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           color: white;
           padding: 12px 16px;
           border-radius: 10px;
@@ -623,7 +618,7 @@ document.getElementById('btn-print-weekmenu').addEventListener('click', () => {
           margin: 20px 0 12px;
           page-break-after: avoid;
         }
-        b { color: #c4735a; }
+        b { color: #667eea; }
         h2 { font-size: 28px; margin-bottom: 16px; }
         @media print {
           .week-day-header { page-break-before: auto; }
@@ -684,7 +679,7 @@ function toast(message, type = 'success') {
     border-radius: 16px;
     font-weight: 600;
     z-index: 9999;
-    box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 8px 32px rgba(196,115,90,0.35);
     animation: slideUpToast 0.3s;  `;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3000);
@@ -746,18 +741,15 @@ async function loadProfile() {
 
 // ===== ЗАПУСК =====
 window.addEventListener('load', async () => {
-  // Инициализация
   await init();
-
   // Скрываем лоадер
   const loader = document.getElementById('loader');
   if (loader) {
+    loader.style.transition = 'opacity 0.35s';
     loader.style.opacity = '0';
-    loader.style.transition = 'opacity 0.3s';
-    setTimeout(() => { loader.style.display = 'none'; }, 300);
+    setTimeout(() => { loader.style.display = 'none'; }, 350);
   }
-
-  // Показываем главный экран если нет активного
+  // Показываем главный экран
   const active = document.querySelector('.screen.active');
   if (!active) showScreen('home');
 });
@@ -774,4 +766,35 @@ RecipeManager.render = function() {
   const pctEl = document.getElementById('step-percent');
   if (fill) fill.style.width = pct + '%';
   if (pctEl) pctEl.textContent = pct + '%';
+};
+
+
+// ===== НОВЫЕ ФУНКЦИИ: история, замки, таймер =====
+// Перехватываем RecipeManager.load для сохранения в историю и показа таймера
+const RecipeHistory = {
+  KEY: 'chef_history',
+  load() { try { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); } catch(e) { return []; } },
+  save(list) { try { localStorage.setItem(this.KEY, JSON.stringify(list.slice(0,10))); } catch(e) {} },
+  push(recipe) {
+    const list = this.load();
+    list.unshift({ title: (recipe.title||'').replace(/<[^>]+>/g,''), ts: Date.now(), fullText: recipe.fullText || recipe.steps.join('\n\n') });
+    this.save(list);
+  }
+};
+window.RecipeHistory = RecipeHistory;
+
+const _origLoad2 = RecipeManager.load.bind(RecipeManager);
+RecipeManager.load = function(recipe) {
+  _origLoad2(recipe);
+  if (recipe && recipe.title) RecipeHistory.push(recipe);
+  const plan = window._userPlan || 'FREE';
+  // Таймер — только PRO+
+  const tw = document.getElementById('step-timer-wrap');
+  if (tw) tw.style.display = (plan !== 'FREE') ? 'block' : 'none';
+  // Замок на список покупок
+  const ls = document.getElementById('lock-shopping');
+  if (ls) ls.textContent = (plan !== 'FREE') ? '' : '\uD83D\uDD12';
+  // Замок на поделиться
+  const lsh = document.getElementById('lock-share');
+  if (lsh) lsh.textContent = (plan === 'VIP') ? '' : '\uD83D\uDD12';
 };
