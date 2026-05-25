@@ -60,7 +60,7 @@ const API = {
   getFullProfile: () => API.request('/api/user/fullprofile'),
   generateWeekMenu: (prefs) => API.request('/api/vip/weekmenu', {
     method: 'POST',
-    body: JSON.stringify({ prefs })
+    body: JSON.stringify({ prefs: `Составь меню СТРОГО на 7 дней (Понедельник, Вторник, Среда, Четверг, Пятница, Суббота, Воскресенье). Для каждого дня: Завтрак, Обед, Ужин и Перекус. ${prefs || ''}`.trim() })
   }),
   askDiet: (question) => API.request('/api/vip/diet', {
     method: 'POST',
@@ -127,45 +127,48 @@ const Voice = {
     });
   },
   
+  _audio: null,
+
   speak(text) {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
     const clean = prepareForTTS(text);
     if (!clean) return;
+    this.stop();
 
-    const doSpeak = () => {
-      const utter = new SpeechSynthesisUtterance(clean);
-      utter.lang = 'ru-RU';
-      utter.rate = 0.9;
-      utter.pitch = 1.05;
-      utter.volume = 1;
-
-      // Выбираем лучший русский голос (предпочитаем онлайн/женский)
-      const voices = window.speechSynthesis.getVoices();
-      const ruVoices = voices.filter(v => v.lang === 'ru-RU' || v.lang === 'ru');
-      if (ruVoices.length) {
-        const online = ruVoices.filter(v => !v.localService);
-        const femaleKeywords = /milena|katya|irina|alena|yelena|female|siri|google/i;
-        const pool = online.length ? online : ruVoices;
-        const best = pool.find(v => femaleKeywords.test(v.name)) || pool[0];
-        if (best) utter.voice = best;
+    // Разбиваем на части по 200 символов (ограничение Google TTS)
+    const chunks = [];
+    let remaining = clean;
+    while (remaining.length > 0) {
+      let cut = 200;
+      if (remaining.length > 200) {
+        // Режем по пробелу чтобы не резать слово
+        const space = remaining.lastIndexOf(' ', 200);
+        cut = space > 100 ? space : 200;
       }
-
-      window.speechSynthesis.speak(utter);
-    };
-
-    // iOS загружает голоса асинхронно — ждём если список ещё пуст
-    if (window.speechSynthesis.getVoices().length > 0) {
-      doSpeak();
-    } else {
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.onvoiceschanged = null;
-        doSpeak();
-      };
+      chunks.push(remaining.slice(0, cut).trim());
+      remaining = remaining.slice(cut).trim();
     }
+
+    let i = 0;
+    const playNext = () => {
+      if (i >= chunks.length) return;
+      const chunk = chunks[i++];
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ru&client=tw-ob&q=${encodeURIComponent(chunk)}`;
+      this._audio = new Audio(url);
+      this._audio.volume = 1;
+      this._audio.playbackRate = 0.95;
+      this._audio.onended = playNext;
+      this._audio.onerror = playNext; // если заблокировано — пропускаем
+      this._audio.play().catch(() => {});
+    };
+    playNext();
   },
   
   stop() {
+    if (this._audio) {
+      this._audio.pause();
+      this._audio.src = '';
+      this._audio = null;
+    }
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   }
 };
@@ -594,6 +597,39 @@ const WeekMenu = {
   }
 };
 
+// ===== СОХРАНЕНИЕ МЕНЮ В localStorage =====
+const WeekMenuStorage = {
+  KEY: 'chef_weekmenu',
+  save(rawText) {
+    try { localStorage.setItem(this.KEY, JSON.stringify({ text: rawText, ts: Date.now() })); } catch(e) {}
+  },
+  load() {
+    try { const d = JSON.parse(localStorage.getItem(this.KEY) || 'null'); return d ? d.text : null; } catch(e) { return null; }
+  },
+  clear() {
+    try { localStorage.removeItem(this.KEY); } catch(e) {}
+  }
+};
+
+// Показываем сохранённое меню при открытии экрана weekmenu
+const _origShowScreen = showScreen;
+window.showScreen = function(name) {
+  _origShowScreen(name);
+  if (name === 'weekmenu') {
+    const saved = WeekMenuStorage.load();
+    if (saved) {
+      WeekMenu._rawText = saved;
+      document.getElementById('weekmenu-result').style.display = 'block';
+      document.getElementById('wm-day-view').style.display = 'block';
+      document.getElementById('wm-full-wrap').style.display = 'none';
+      WeekMenu.load(saved.replace(/<[^>]+>/g, '\n').replace(/\n{3,}/g, '\n\n'));
+      // Показываем кнопку сброса
+      const resetBtn = document.getElementById('btn-reset-weekmenu');
+      if (resetBtn) resetBtn.style.display = 'block';
+    }
+  }
+};
+
 document.getElementById('btn-generate-weekmenu').addEventListener('click', async () => {
   const prefs = document.getElementById('weekmenu-prefs').value;
   const btn = document.getElementById('btn-generate-weekmenu');
@@ -606,13 +642,18 @@ document.getElementById('btn-generate-weekmenu').addEventListener('click', async
   try {
     const data = await API.generateWeekMenu(prefs);
 
-    // Сохраняем сырой текст для скачивания
+    // Сохраняем в localStorage — переживёт закрытие приложения
     WeekMenu._rawText = data.menu;
+    WeekMenuStorage.save(data.menu);
 
     // Показываем пошаговый вид
     document.getElementById('weekmenu-result').style.display = 'block';
     document.getElementById('wm-day-view').style.display = 'block';
     document.getElementById('wm-full-wrap').style.display = 'none';
+
+    // Показываем кнопку сброса
+    const resetBtn = document.getElementById('btn-reset-weekmenu');
+    if (resetBtn) resetBtn.style.display = 'block';
 
     // Парсим и отображаем первый день
     WeekMenu.load(data.menu.replace(/<[^>]+>/g, '\n').replace(/\n{3,}/g, '\n\n'));
@@ -637,15 +678,22 @@ document.getElementById('btn-generate-weekmenu').addEventListener('click', async
   }
 });
 
-// Навигация по дням
+// Кнопка "Готово" / сброс меню
 document.addEventListener('click', function(e) {
-  if (e.target.id === 'wm-btn-next') WeekMenu.next();
-  if (e.target.id === 'wm-btn-prev') WeekMenu.prev();
-  if (e.target.id === 'wm-btn-show-full') {
-    document.getElementById('wm-day-view').style.display = 'none';
-    document.getElementById('wm-full-wrap').style.display = 'block';
+  if (e.target.id === 'btn-reset-weekmenu') {
+    if (confirm('Удалить текущее меню и создать новое?')) {
+      WeekMenuStorage.clear();
+      WeekMenu._rawText = null;
+      WeekMenu.days = [];
+      document.getElementById('weekmenu-result').style.display = 'none';
+      const resetBtn = document.getElementById('btn-reset-weekmenu');
+      if (resetBtn) resetBtn.style.display = 'none';
+      tg?.HapticFeedback?.impactOccurred('medium');
+    }
   }
 });
+
+// Навигация по дням (prev обрабатывается через onclick в HTML)
 
 // ===== СКАЧАТЬ КАК ИЗОБРАЖЕНИЕ (PNG) — работает везде =====
 document.getElementById('btn-download-weekmenu').addEventListener('click', async () => {
