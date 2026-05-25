@@ -404,12 +404,45 @@
       <!-- Форма генерации -->
       <div class="vip-card">
         <span class="vip-card-icon">&#x1F5D3;</span>
-        <h3>Персональное меню</h3>
-        <p class="hint" style="margin-bottom:18px;text-align:left;">ИИ составит меню на 7 дней — листай по дням как рецепт</p>
+        <h3>Персональное меню на 7 дней</h3>
+        <p class="hint" style="margin-bottom:18px;text-align:left;">Листай по дням — каждый день: Завтрак, Обед, Ужин, Перекус</p>
+
+        <!-- Уровень меню -->
         <div class="form-block">
-          <div class="form-label">Предпочтения и ограничения</div>
+          <div class="form-label">Уровень меню</div>
+          <div class="wm-level-row">
+            <button class="wm-level-btn active" data-level="base">
+              <span class="wm-level-icon">&#x1F3E0;</span>
+              <span class="wm-level-name">Базовое</span>
+              <span class="wm-level-desc">Простые блюда из того что есть дома</span>
+            </button>
+            <button class="wm-level-btn" data-level="pro">
+              <span class="wm-level-icon">&#x1F468;&#x200D;&#x1F373;</span>
+              <span class="wm-level-name">Профи</span>
+              <span class="wm-level-desc">Интересные рецепты, чуть сложнее</span>
+            </button>
+            <button class="wm-level-btn" data-level="luxury">
+              <span class="wm-level-icon">&#x1F451;</span>
+              <span class="wm-level-name">Изысканное</span>
+              <span class="wm-level-desc">Ресторанный уровень, особые продукты</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Количество порций -->
+        <div class="form-block">
+          <div class="form-label">На сколько человек</div>
+          <div class="portions-row">
+            <button class="portions-btn" onclick="changeWmPortions(-1)">&#x2212;</button>
+            <input type="number" id="wm-portions" value="2" min="1" max="10" readonly>
+            <button class="portions-btn" onclick="changeWmPortions(1)">&#x2B;</button>
+          </div>
+        </div>
+
+        <div class="form-block">
+          <div class="form-label">Дополнительные пожелания</div>
           <div class="textarea-wrap">
-            <textarea id="weekmenu-prefs" rows="3" placeholder="Без мяса, бюджетно, на 2 человек&#x2026;"></textarea>
+            <textarea id="weekmenu-prefs" rows="2" placeholder="Без глютена, без свинины, побольше белка&#x2026;"></textarea>
           </div>
         </div>
         <button id="btn-generate-weekmenu" class="primary-btn gold-btn full-btn">&#x2728; Составить меню</button>
