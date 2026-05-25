@@ -132,10 +132,37 @@ const Voice = {
     window.speechSynthesis.cancel();
     const clean = prepareForTTS(text);
     if (!clean) return;
-    const utter = new SpeechSynthesisUtterance(clean);
-    utter.lang = 'ru-RU';
-    utter.rate = 1;
-    window.speechSynthesis.speak(utter);
+
+    const doSpeak = () => {
+      const utter = new SpeechSynthesisUtterance(clean);
+      utter.lang = 'ru-RU';
+      utter.rate = 0.9;
+      utter.pitch = 1.05;
+      utter.volume = 1;
+
+      // Выбираем лучший русский голос (предпочитаем онлайн/женский)
+      const voices = window.speechSynthesis.getVoices();
+      const ruVoices = voices.filter(v => v.lang === 'ru-RU' || v.lang === 'ru');
+      if (ruVoices.length) {
+        const online = ruVoices.filter(v => !v.localService);
+        const femaleKeywords = /milena|katya|irina|alena|yelena|female|siri|google/i;
+        const pool = online.length ? online : ruVoices;
+        const best = pool.find(v => femaleKeywords.test(v.name)) || pool[0];
+        if (best) utter.voice = best;
+      }
+
+      window.speechSynthesis.speak(utter);
+    };
+
+    // iOS загружает голоса асинхронно — ждём если список ещё пуст
+    if (window.speechSynthesis.getVoices().length > 0) {
+      doSpeak();
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.onvoiceschanged = null;
+        doSpeak();
+      };
+    }
   },
   
   stop() {
@@ -372,7 +399,6 @@ document.getElementById('btn-generate').addEventListener('click', async () => {
     const recipe = await API.generateRecipe(state.ingredients, details);
     RecipeManager.load(recipe);
     showScreen('recipe');
-    Voice.speak(recipe.steps[0]);
     tg?.HapticFeedback?.notificationOccurred('success');
   } catch (e) {
     console.error('Recipe generation error:', e);
