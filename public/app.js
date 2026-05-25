@@ -58,9 +58,9 @@ const API = {
   }),
   getPaymentInfo: () => API.request('/api/payment/info'),
   getFullProfile: () => API.request('/api/user/fullprofile'),
-  generateWeekMenu: (prefs) => API.request('/api/vip/weekmenu', {
+  generateWeekMenu: (prefs, level, portions) => API.request('/api/vip/weekmenu', {
     method: 'POST',
-    body: JSON.stringify({ prefs: `Составь меню СТРОГО на 7 дней (Понедельник, Вторник, Среда, Четверг, Пятница, Суббота, Воскресенье). Для каждого дня: Завтрак, Обед, Ужин и Перекус. ${prefs || ''}`.trim() })
+    body: JSON.stringify({ prefs, level, portions })
   }),
   askDiet: (question) => API.request('/api/vip/diet', {
     method: 'POST',
@@ -597,6 +597,27 @@ const WeekMenu = {
   }
 };
 
+// ===== WEEK MENU: уровни и порции =====
+let _wmLevel = 'base';
+let _wmPortions = 2;
+
+// Переключение уровней
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.wm-level-btn');
+  if (btn) {
+    document.querySelectorAll('.wm-level-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _wmLevel = btn.dataset.level;
+    tg?.HapticFeedback?.impactOccurred('light');
+  }
+});
+
+window.changeWmPortions = function(delta) {
+  _wmPortions = Math.max(1, Math.min(10, _wmPortions + delta));
+  document.getElementById('wm-portions').value = _wmPortions;
+};
+
+
 // ===== СОХРАНЕНИЕ МЕНЮ В localStorage =====
 const WeekMenuStorage = {
   KEY: 'chef_weekmenu',
@@ -623,7 +644,6 @@ window.showScreen = function(name) {
       document.getElementById('wm-day-view').style.display = 'block';
       document.getElementById('wm-full-wrap').style.display = 'none';
       WeekMenu.load(saved.replace(/<[^>]+>/g, '\n').replace(/\n{3,}/g, '\n\n'));
-      // Показываем кнопку сброса
       const resetBtn = document.getElementById('btn-reset-weekmenu');
       if (resetBtn) resetBtn.style.display = 'block';
     }
@@ -631,7 +651,7 @@ window.showScreen = function(name) {
 };
 
 document.getElementById('btn-generate-weekmenu').addEventListener('click', async () => {
-  const prefs = document.getElementById('weekmenu-prefs').value;
+  const userPrefs = document.getElementById('weekmenu-prefs').value.trim();
   const btn = document.getElementById('btn-generate-weekmenu');
   const originalText = btn.innerHTML;
 
@@ -640,23 +660,22 @@ document.getElementById('btn-generate-weekmenu').addEventListener('click', async
   tg?.HapticFeedback?.impactOccurred('medium');
 
   try {
-    const data = await API.generateWeekMenu(prefs);
+    const data = await API.generateWeekMenu(userPrefs, _wmLevel, _wmPortions);
 
-    // Сохраняем в localStorage — переживёт закрытие приложения
-    WeekMenu._rawText = data.menu;
-    WeekMenuStorage.save(data.menu);
+    // Очищаем markdown артефакты (* ** ##)
+    const cleanMenu = (data.menu || '').replace(/\*\*/g, '').replace(/\*/g, '').replace(/^#{1,3}\s*/gm, '');
 
-    // Показываем пошаговый вид
+    WeekMenu._rawText = cleanMenu;
+    WeekMenuStorage.save(cleanMenu);
+
     document.getElementById('weekmenu-result').style.display = 'block';
     document.getElementById('wm-day-view').style.display = 'block';
     document.getElementById('wm-full-wrap').style.display = 'none';
 
-    // Показываем кнопку сброса
     const resetBtn = document.getElementById('btn-reset-weekmenu');
     if (resetBtn) resetBtn.style.display = 'block';
 
-    // Парсим и отображаем первый день
-    WeekMenu.load(data.menu.replace(/<[^>]+>/g, '\n').replace(/\n{3,}/g, '\n\n'));
+    WeekMenu.load(cleanMenu.replace(/<[^>]+>/g, '\n').replace(/\n{3,}/g, '\n\n'));
 
     setTimeout(() => {
       document.getElementById('weekmenu-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -678,7 +697,7 @@ document.getElementById('btn-generate-weekmenu').addEventListener('click', async
   }
 });
 
-// Кнопка "Готово" / сброс меню
+// Кнопка сброса меню
 document.addEventListener('click', function(e) {
   if (e.target.id === 'btn-reset-weekmenu') {
     if (confirm('Удалить текущее меню и создать новое?')) {
