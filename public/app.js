@@ -353,6 +353,11 @@ const RecipeManager = {
   }
 };
 
+// HTML escape для безопасного отображения текста
+function esc(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
 // ============================================================
 //  WEEK MENU
 // ============================================================
@@ -370,42 +375,59 @@ const WeekMenu = {
   _rawText: null,
 
   parse(raw) {
-    const dayNames = ['понедельник','вторник','среда','четверг','пятница','суббота','воскресенье'];
-    const lines = raw.split('\n');
-    const days = [];
-    let cur = null;
+    // Разбиваем по маркеру который сами же вставляем в api.js:
+    // "════...════\nДЕНЬ N — НАЗВАНИЕ\n════...════"
+    // Ищем "ДЕНЬ N" как разделитель — надёжный паттерн
+    const dayPattern = /ДЕНЬ\s+(\d+)\s*[—–-]\s*([^\n]+)/gi;
+    const segments = [];
+    let lastIndex = 0;
+    let match;
 
-    for (const line of lines) {
-      const clean = line.replace(/<[^>]+>/g, '').trim();
-      const lower = clean.toLowerCase();
-      const isHeader = (
-        (dayNames.some(d => lower.includes(d)) && /день\s*\d+|^\d|^═/.test(lower + clean)) ||
-        /^ДЕНЬ\s+\d+/i.test(clean) ||
-        /════/.test(clean)
-      );
-      if (isHeader && clean.length < 80) {
-        if (cur) days.push(cur);
-        cur = { title: clean.replace(/[═\s]+/g, ' ').trim(), lines: [] };
-      } else if (/^ДЕНЬ\s+\d+\s*—/i.test(clean)) {
-        if (cur) days.push(cur);
-        cur = { title: clean, lines: [] };
-      } else if (cur && clean) {
-        cur.lines.push(line);
+    while ((match = dayPattern.exec(raw)) !== null) {
+      if (segments.length > 0) {
+        segments[segments.length - 1].end = match.index;
       }
+      segments.push({
+        num: parseInt(match[1]),
+        title: `День ${match[1]} — ${match[2].trim().replace(/[═\s]+$/,'')}`,
+        start: match.index,
+        end: raw.length
+      });
     }
-    if (cur) days.push(cur);
 
-    // Fallback — делим на 7 частей
-    if (days.length < 3) {
-      const allLines = lines.filter(l => l.trim());
-      const chunk = Math.ceil(allLines.length / 7);
-      return ['Понедельник','Вторник','Среда','Четверг','Пятница','Суббота','Воскресенье'].map((title, i) => ({
-        title: `День ${i+1} — ${title}`,
-        content: allLines.slice(i * chunk, (i + 1) * chunk).join('\n')
+    if (segments.length >= 3) {
+      return segments.map(seg => ({
+        title: seg.title,
+        content: raw.slice(seg.start, seg.end)
+          // убираем заголовок и разделители из контента
+          .replace(/^[═\s]*ДЕНЬ\s+\d+\s*[—–-][^\n]*\n?/i, '')
+          .replace(/^[═]+\n?/gm, '')
+          .replace(/\*\*/g, '').replace(/\*/g, '')
+          .trim()
       }));
     }
 
-    return days.map(d => ({ title: d.title, content: d.lines.join('\n') }));
+    // Fallback — по названиям дней
+    const dayNames = ['ПОНЕДЕЛЬНИК','ВТОРНИК','СРЕДА','ЧЕТВЕРГ','ПЯТНИЦА','СУББОТА','ВОСКРЕСЕНЬЕ'];
+    const ruNames  = ['Понедельник','Вторник','Среда','Четверг','Пятница','Суббота','Воскресенье'];
+    const fallbackPattern = new RegExp(`(${dayNames.join('|')})`, 'gi');
+    const parts = raw.split(fallbackPattern).filter(Boolean);
+    const result = [];
+    for (let i = 0; i < parts.length - 1; i += 2) {
+      const dayName = parts[i].trim();
+      const content = (parts[i + 1] || '').replace(/\*\*/g,'').replace(/\*/g,'').trim();
+      const idx = dayNames.findIndex(d => d === dayName.toUpperCase());
+      result.push({ title: `День ${idx + 1} — ${ruNames[idx] || dayName}`, content });
+    }
+    if (result.length >= 3) return result;
+
+    // Последний fallback — делим на 7 равных частей
+    const lines = raw.split('\n').filter(l => l.trim());
+    const chunk = Math.ceil(lines.length / 7);
+    return ruNames.map((name, i) => ({
+      title: `День ${i+1} — ${name}`,
+      content: lines.slice(i * chunk, (i + 1) * chunk).join('\n')
+    }));
   },
 
   load(raw) {
@@ -421,40 +443,44 @@ const WeekMenu = {
     const total = this.days.length;
     const pct = Math.round(((this.current + 1) / total) * 100);
 
-    // Прогресс-бар
     const fill = $('wm-progress-fill');
     const meta = $('wm-progress-meta');
     if (fill) fill.style.width = pct + '%';
     if (meta) meta.textContent = `День ${this.current + 1} из ${total}`;
 
-    // Заголовок
     const titleEl = $('wm-day-title');
     if (titleEl) titleEl.textContent = day.title;
 
-    // Контент — форматируем
     const contentEl = $('wm-day-content');
     if (contentEl) {
-      const html = day.content
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-        // Приёмы пищи
-        .replace(/(🌅\s*ЗАВТРАК[^\n]*)/g, '<div class="wm-meal-header wm-breakfast">$1</div>')
-        .replace(/(☀️\s*ОБЕД[^\n]*)/g,    '<div class="wm-meal-header wm-lunch">$1</div>')
-        .replace(/(🌙\s*УЖИН[^\n]*)/g,    '<div class="wm-meal-header wm-dinner">$1</div>')
-        .replace(/(🍎\s*ПЕРЕКУС[^\n]*)/g, '<div class="wm-meal-header wm-snack">$1</div>')
-        // Секции
-        .replace(/(🥣[^\n]+)/g, '<div class="wm-ingr">$1</div>')
-        .replace(/(⏱[^\n]+)/g,  '<div class="wm-time">$1</div>')
-        .replace(/(🌡[^\n]+)/g,  '<div class="wm-temp">$1</div>')
-        .replace(/(👨‍🍳[^\n]*)/g, '<div class="wm-steps-header">$1</div>')
-        .replace(/^(\d+\.[^\n]+)/gm, '<div class="wm-step">$1</div>')
-        .replace(/(📊[^\n]*КБЖУ[^\n]*)/gi, '<div class="wm-kbju">$1</div>')
-        .replace(/(📊\s*ИТОГО[^\n]*)/gi,   '<div class="wm-total">$1</div>')
-        .replace(/(💡[^\n]+)/g,  '<div class="wm-tip">$1</div>')
-        .replace(/\n/g, '<br>');
+      // Форматируем построчно — надёжнее чем regex по всему тексту
+      const lines = day.content.split('\n');
+      let html = '';
+
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t) { html += '<div class="wm-spacer"></div>'; continue; }
+
+        if (/^🌅.*ЗАВТРАК/i.test(t))      html += `<div class="wm-meal-header wm-breakfast">${esc(t)}</div>`;
+        else if (/^☀️.*ОБЕД/i.test(t))    html += `<div class="wm-meal-header wm-lunch">${esc(t)}</div>`;
+        else if (/^🌙.*УЖИН/i.test(t))    html += `<div class="wm-meal-header wm-dinner">${esc(t)}</div>`;
+        else if (/^🍎.*ПЕРЕКУС/i.test(t)) html += `<div class="wm-meal-header wm-snack">${esc(t)}</div>`;
+        else if (/^🥣/.test(t))           html += `<div class="wm-ingr">${esc(t)}</div>`;
+        else if (/^—\s/.test(t))          html += `<div class="wm-ingr-item">${esc(t)}</div>`;
+        else if (/^⏱/.test(t))           html += `<div class="wm-time">${esc(t)}</div>`;
+        else if (/^🌡/.test(t))           html += `<div class="wm-temp">${esc(t)}</div>`;
+        else if (/^👨‍🍳/.test(t))          html += `<div class="wm-steps-header">${esc(t)}</div>`;
+        else if (/^\d+\./.test(t))        html += `<div class="wm-step"><span class="wm-step-num">${t.match(/^\d+/)[0]}.</span><span class="wm-step-text">${esc(t.replace(/^\d+\.\s*/,''))}</span></div>`;
+        else if (/^📊.*ИТОГО/i.test(t))   html += `<div class="wm-total">${esc(t)}</div>`;
+        else if (/^📊/.test(t))           html += `<div class="wm-kbju">${esc(t)}</div>`;
+        else if (/^💡/.test(t))           html += `<div class="wm-tip">${esc(t)}</div>`;
+        else if (/^[═─]+$/.test(t))       html += ''; // разделители — пропускаем
+        else                               html += `<div class="wm-text">${esc(t)}</div>`;
+      }
+
       contentEl.innerHTML = html;
     }
 
-    // Кнопки
     const btnPrev = $('wm-btn-prev');
     const btnNext = $('wm-btn-next');
     if (btnPrev) btnPrev.disabled = this.current === 0;
@@ -465,7 +491,7 @@ const WeekMenu = {
           $('wm-day-view').style.display = 'none';
           $('wm-full-wrap').style.display = 'block';
           const rawEl = $('weekmenu-text');
-          if (rawEl && this._rawText) rawEl.textContent = this._rawText.replace(/<[^>]+>/g, '');
+          if (rawEl && this._rawText) rawEl.textContent = this._rawText.replace(/[═]+/g,'---').replace(/\*\*/g,'').replace(/\*/g,'');
         };
       } else {
         btnNext.textContent = 'Далее →';
@@ -475,7 +501,7 @@ const WeekMenu = {
 
     const card = $('wm-day-card');
     if (card) card.scrollTop = 0;
-    window.scrollTo({ top: document.getElementById('weekmenu-result')?.offsetTop || 0, behavior: 'smooth' });
+    $('weekmenu-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   },
 
   next() { if (this.current < this.days.length - 1) { this.current++; this.render(); haptic('light'); } },
