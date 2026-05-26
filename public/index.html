@@ -30,7 +30,97 @@
     <p>Доступ запрещён</p>
   </div>
 
-  <!-- HOME -->
+  <!-- ONBOARDING -->
+  <div id="screen-onboarding" class="screen onb-screen" style="display:none;">
+
+    <!-- Слайды -->
+    <div class="onb-slides" id="onb-slides">
+
+      <!-- Слайд 1 -->
+      <div class="onb-slide active" data-slide="0">
+        <div class="onb-bg onb-bg-1"></div>
+        <div class="onb-content">
+          <div class="onb-emoji-big">👨‍🍳</div>
+          <h2 class="onb-title">Твой личный<br>шеф-повар</h2>
+          <p class="onb-desc">Получай пошаговые рецепты любых блюд за секунды. С точными граммами, временем и советами профессионала.</p>
+          <div class="onb-preview">
+            <div class="onb-preview-card">
+              <div class="onb-preview-row"><span class="onb-tag">🍽</span><span>Паста Карбонара</span></div>
+              <div class="onb-preview-row muted"><span class="onb-tag">⏱</span><span>20 минут · 2 порции</span></div>
+              <div class="onb-preview-row muted"><span class="onb-tag">👨‍🍳</span><span>7 пошаговых шагов</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Слайд 2 -->
+      <div class="onb-slide" data-slide="1">
+        <div class="onb-bg onb-bg-2"></div>
+        <div class="onb-content">
+          <div class="onb-emoji-big">📅</div>
+          <h2 class="onb-title">Меню на неделю<br>за 1 минуту</h2>
+          <p class="onb-desc">ИИ составит полный план питания на 7 дней — завтрак, обед, ужин и перекус с рецептами для каждого приёма пищи.</p>
+          <div class="onb-week-preview">
+            <div class="onb-day-pill active">Пн</div>
+            <div class="onb-day-pill">Вт</div>
+            <div class="onb-day-pill">Ср</div>
+            <div class="onb-day-pill">Чт</div>
+            <div class="onb-day-pill">Пт</div>
+            <div class="onb-day-pill">Сб</div>
+            <div class="onb-day-pill">Вс</div>
+          </div>
+          <div class="onb-levels">
+            <div class="onb-level-pill">🏠 Базовое</div>
+            <div class="onb-level-pill">👨‍🍳 Профи</div>
+            <div class="onb-level-pill">👑 Изысканное</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Слайд 3 -->
+      <div class="onb-slide" data-slide="2">
+        <div class="onb-bg onb-bg-3"></div>
+        <div class="onb-content">
+          <div class="onb-emoji-big">🎁</div>
+          <h2 class="onb-title">Начни бесплатно</h2>
+          <p class="onb-desc">3 рецепта бесплатно прямо сейчас. Первое меню на неделю — в подарок!</p>
+          <div class="onb-features">
+            <div class="onb-feature">
+              <span class="onb-feature-icon">✅</span>
+              <span>Пошаговые рецепты с граммами</span>
+            </div>
+            <div class="onb-feature">
+              <span class="onb-feature-icon">✅</span>
+              <span>Голосовой ввод блюда</span>
+            </div>
+            <div class="onb-feature">
+              <span class="onb-feature-icon">✅</span>
+              <span>Список покупок одним нажатием</span>
+            </div>
+            <div class="onb-feature">
+              <span class="onb-feature-icon">🎁</span>
+              <span><b>Меню на неделю бесплатно</b></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Точки-индикаторы -->
+    <div class="onb-dots">
+      <div class="onb-dot active" data-dot="0"></div>
+      <div class="onb-dot" data-dot="1"></div>
+      <div class="onb-dot" data-dot="2"></div>
+    </div>
+
+    <!-- Кнопки -->
+    <div class="onb-footer">
+      <button id="onb-skip" class="onb-skip-btn" onclick="finishOnboarding()">Пропустить</button>
+      <button id="onb-next" class="onb-next-btn" onclick="onbNext()">Далее →</button>
+    </div>
+
+  </div>
   <div id="screen-home" class="screen">
     <header class="app-header">
       <div class="header-brand">
@@ -485,8 +575,9 @@
           <button class="back-btn" style="margin-bottom:14px;" onclick="document.getElementById('wm-day-view').style.display='block';document.getElementById('wm-full-wrap').style.display='none'">
             &#x2190; По дням
           </button>
-          <div class="result-actions">
-            <button id="btn-download-weekmenu" class="primary-btn gold-btn">&#x1F5BC; Картинка</button>
+          <div class="result-actions" style="flex-wrap:wrap;gap:8px;">
+            <button class="primary-btn full-btn" style="margin-bottom:4px;" onclick="showWeekMenuShopping()">&#x1F6D2; Список покупок на неделю</button>
+            <button id="btn-download-weekmenu" class="ghost-btn">&#x1F5BC; Картинка</button>
             <button id="btn-print-weekmenu" class="ghost-btn">&#x1F5A8; Печать</button>
             <button id="btn-share-weekmenu" class="ghost-btn">&#x1F4E4; Поделиться</button>
           </div>
