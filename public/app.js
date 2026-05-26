@@ -76,6 +76,9 @@ const API = {
   getShoppingList: (recipe) => API.request('/api/recipe/shopping-list', {
     method: 'POST', body: JSON.stringify({ recipe })
   }),
+  getWeekMenuShopping: (menu) => API.request('/api/vip/weekmenu-shopping', {
+    method: 'POST', body: JSON.stringify({ menu })
+  }),
   recognizeVoice: async (blob) => {
     const fd = new FormData();
     fd.append('audio', blob, 'voice.webm');
@@ -540,6 +543,78 @@ function showScreen(name) {
 window.showScreen = showScreen;
 
 // ============================================================
+//  ОНБОРДИНГ
+// ============================================================
+
+const ONB_KEY = 'chef_onb_done_v1';
+let _onbCurrent = 0;
+
+window.onbNext = function() {
+  const slides = document.querySelectorAll('.onb-slide');
+  const dots   = document.querySelectorAll('.onb-dot');
+  const nextBtn = $('onb-next');
+
+  // Анимация смены слайда
+  slides[_onbCurrent].classList.remove('active');
+  slides[_onbCurrent].classList.add('exit');
+  setTimeout(() => slides[_onbCurrent]?.classList.remove('exit'), 400);
+
+  _onbCurrent++;
+
+  if (_onbCurrent >= slides.length) {
+    finishOnboarding();
+    return;
+  }
+
+  slides[_onbCurrent].classList.add('active');
+  dots.forEach(d => d.classList.remove('active'));
+  dots[_onbCurrent]?.classList.add('active');
+  haptic('light');
+
+  // На последнем слайде меняем текст кнопки
+  if (_onbCurrent === slides.length - 1) {
+    nextBtn.textContent = '🚀 Начать готовить!';
+    nextBtn.classList.add('onb-next-final');
+    $('onb-skip').style.display = 'none';
+  }
+};
+
+// Свайп по слайдам
+let _onbTouchX = 0;
+document.addEventListener('touchstart', e => {
+  if (!$('screen-onboarding')?.style.display !== 'none') return;
+  _onbTouchX = e.touches[0].clientX;
+}, { passive: true });
+document.addEventListener('touchend', e => {
+  if (!document.getElementById('screen-onboarding')?.classList.contains('active-onb')) return;
+  const diff = _onbTouchX - e.changedTouches[0].clientX;
+  if (Math.abs(diff) > 50) {
+    if (diff > 0) onbNext();
+  }
+}, { passive: true });
+
+window.finishOnboarding = function() {
+  try { localStorage.setItem(ONB_KEY, '1'); } catch {}
+  const onbEl = $('screen-onboarding');
+  if (onbEl) {
+    onbEl.classList.add('onb-fade-out');
+    setTimeout(() => {
+      onbEl.style.display = 'none';
+      onbEl.classList.remove('onb-fade-out');
+    }, 400);
+  }
+  showScreen('home');
+  hapticNotify('success');
+
+  // Показываем первый раз приветственный тост
+  setTimeout(() => toast('👨‍🍳 Привет! Назови любое блюдо или выбери из списка', 'success', 4000), 600);
+};
+
+function shouldShowOnboarding() {
+  try { return !localStorage.getItem(ONB_KEY); } catch { return false; }
+}
+
+// ============================================================
 //  INIT
 // ============================================================
 
@@ -729,20 +804,33 @@ window.showShoppingList = async function() {
   if (!RecipeManager.current) return;
 
   showScreen('shopping');
-  $('shopping-recipe-name').textContent = RecipeManager.current.title.replace(/<[^>]+>/g,'');
+  const titleClean = RecipeManager.current.title.replace(/<[^>]+>/g,'');
+  $('shopping-recipe-name').textContent = titleClean;
   $('shopping-loading').style.display = 'flex';
   $('shopping-list-wrap').style.display = 'none';
 
+  // Собираем полный текст рецепта из всех шагов
+  const fullText = RecipeManager.current.fullText
+    || RecipeManager.current.steps?.map((s,i) => `Шаг ${i+1}: ${s.replace(/<[^>]+>/g,'')}`).join('\n\n')
+    || '';
+
+  if (!fullText.trim()) {
+    $('shopping-loading').style.display = 'none';
+    $('shopping-list-wrap').innerHTML = '<p style="color:var(--text-muted);padding:20px;text-align:center">Нет данных рецепта</p>';
+    $('shopping-list-wrap').style.display = 'block';
+    return;
+  }
+
   try {
-    const fullText = RecipeManager.current.fullText || RecipeManager.current.steps.join('\n');
     const data = await API.getShoppingList(fullText);
     const items = data.items || [];
     window._shoppingItems = items;
 
     const wrap = $('shopping-items');
     wrap.innerHTML = '';
+
     if (!items.length) {
-      wrap.innerHTML = '<p style="color:var(--text-muted);padding:16px 0;text-align:center">Не удалось извлечь ингредиенты</p>';
+      wrap.innerHTML = '<p style="color:var(--text-muted);padding:16px 0;text-align:center">Не удалось извлечь ингредиенты.<br>Попробуй ещё раз.</p>';
     } else {
       items.forEach((item, idx) => {
         const el = document.createElement('div');
@@ -760,10 +848,12 @@ window.showShoppingList = async function() {
 
     $('shopping-loading').style.display = 'none';
     $('shopping-list-wrap').style.display = 'block';
-  } catch {
+    hapticNotify('success');
+  } catch(e) {
     $('shopping-loading').style.display = 'none';
-    $('shopping-list-wrap').innerHTML = '<p style="color:var(--text-muted);padding:20px;text-align:center">Ошибка загрузки списка</p>';
+    $('shopping-list-wrap').innerHTML = `<p style="color:var(--text-muted);padding:20px;text-align:center">Ошибка: ${e.message}</p>`;
     $('shopping-list-wrap').style.display = 'block';
+    toast('Ошибка загрузки списка', 'error');
   }
 };
 
@@ -777,8 +867,80 @@ window.copyShoppingList = async function() {
 };
 
 // ============================================================
-//  ПОДЕЛИТЬСЯ РЕЦЕПТОМ
+//  СПИСОК ПОКУПОК ДЛЯ МЕНЮ НА НЕДЕЛЮ
 // ============================================================
+
+window.showWeekMenuShopping = async function() {
+  if (!WeekMenu._rawText) { toast('Сначала сгенерируй меню на неделю', 'error'); return; }
+
+  // Показываем модальное окно
+  const existing = $('weekmenu-shopping-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'weekmenu-shopping-modal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>🛒 Список покупок на неделю</h3>
+        <button class="modal-close" onclick="document.getElementById('weekmenu-shopping-modal').remove()">✕</button>
+      </div>
+      <div class="modal-body" id="wm-shop-body">
+        <div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:32px 0;flex-direction:column;">
+          <div style="font-size:36px;animation:wm-bounce 1.2s ease-in-out infinite;">🛒</div>
+          <div style="color:var(--text-muted);font-size:14px;">Составляю список покупок...</div>
+        </div>
+      </div>
+      <div id="wm-shop-actions" style="display:none;margin-top:12px;display:flex;gap:8px;flex-direction:column;">
+        <button class="primary-btn full-btn" onclick="copyWeekMenuShopping()">📋 Скопировать список</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+  try {
+    const data = await API.getWeekMenuShopping(WeekMenu._rawText);
+    const items = data.items || [];
+    window._weekShoppingItems = items;
+
+    const body = $('wm-shop-body');
+    if (!items.length) {
+      body.innerHTML = '<p style="text-align:center;padding:24px;color:var(--text-muted);">Не удалось извлечь ингредиенты</p>';
+      return;
+    }
+
+    let html = `<div style="margin-bottom:12px;font-size:13px;color:var(--text-muted);">${items.length} продуктов на всю неделю</div>`;
+    html += '<div class="shop-list">';
+    items.forEach((item, idx) => {
+      html += `
+        <div class="check-item" id="wsh-${idx}">
+          <label class="check-lbl" for="wci-${idx}">
+            <input type="checkbox" id="wci-${idx}" onchange="this.closest('.check-item').classList.toggle('done',this.checked)">
+            <span class="checkmark"></span>
+          </label>
+          <span class="check-name">${item.name}</span>
+          <span class="check-amt">${item.amount || ''}${item.days ? ' <span class="check-days">'+item.days+'</span>' : ''}</span>
+        </div>`;
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    $('wm-shop-actions').style.display = 'flex';
+    hapticNotify('success');
+  } catch (e) {
+    $('wm-shop-body').innerHTML = `<p style="text-align:center;padding:24px;color:var(--text-muted);">Ошибка: ${e.message}</p>`;
+  }
+};
+
+window.copyWeekMenuShopping = async function() {
+  const items = window._weekShoppingItems || [];
+  const text = '🛒 Список покупок на неделю\n\n' +
+    items.map(i => `• ${i.name}${i.amount ? ' — ' + i.amount : ''}${i.days ? ' (' + i.days + ')' : ''}`).join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('📋 Список скопирован!');
+  } catch { toast('Не удалось скопировать', 'error'); }
+};
 
 window.shareRecipe = async function() {
   const plan = window._userPlan || 'FREE';
@@ -1267,5 +1429,16 @@ window.addEventListener('load', async () => {
     loader.style.opacity = '0';
     setTimeout(() => loader.style.display = 'none', 400);
   }
-  if (!document.querySelector('.screen.active')) showScreen('home');
+
+  // Новым пользователям показываем онбординг
+  if (shouldShowOnboarding()) {
+    const onbEl = $('screen-onboarding');
+    if (onbEl) {
+      onbEl.style.display = 'flex';
+      onbEl.classList.add('active-onb');
+      _onbCurrent = 0;
+    }
+  } else {
+    if (!document.querySelector('.screen.active')) showScreen('home');
+  }
 });
