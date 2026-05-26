@@ -391,7 +391,10 @@ ${levelInstructions[level] || levelInstructions.base}
 Уже использованные блюда (не повторяй): ${usedDishes.length ? usedDishes.join(', ') : 'нет'}
 Напиши только контент этого дня без вводных фраз.`;
 
-      const dayText = await callGigaChat(systemPrompt, userMsg, 4000);
+      const dayText = await callGigaChat(systemPrompt, userMsg, 2500);
+
+      // Небольшая пауза между запросами — избегаем rate limit
+      if (i < 6) await new Promise(r => setTimeout(r, 1000));
 
       // Чистим markdown
       const clean = dayText
@@ -507,25 +510,102 @@ router.post('/recipe/shopping-list', async (req, res) => {
       [tgId]
     );
     if (!sub) return res.status(403).json({ error: 'Только для PRO и VIP' });
-    const system = `Ты помощник по кулинарным покупкам. Из текста рецепта извлеки все ингредиенты и верни их структурированным списком.
-${FOOD_ONLY_GUARD}
-ФОРМАТ ОТВЕТА — только валидный JSON, без пояснений:
-{"items": [{"name": "название продукта", "amount": "количество и единица"}, ...]}
+
+    const system = `Ты помощник по кулинарным покупкам. Из текста рецепта извлеки ВСЕ ингредиенты.
+Верни ТОЛЬКО валидный JSON — никакого текста до или после, никаких markdown блоков.
+Формат строго такой:
+{"items":[{"name":"куриное филе","amount":"400г"},{"name":"чеснок","amount":"3 зубчика"}]}
 
 Правила:
-— Каждый ингредиент отдельным объектом
-— name: только название продукта (без количества)
-— amount: точное количество с единицей (200г, 2 шт, 3 ст.л.)
-— Не дублируй одинаковые продукты — суммируй их
-— Не включай воду, соль, перец (они есть у всех)`;
-    const raw = await callGigaChat(system, `Извлеки список покупок из рецепта:\n${recipe}`);
+- name: только название продукта, строчными буквами
+- amount: точное количество с единицей
+- Не дублируй одинаковые продукты — суммируй
+- НЕ включай: воду, соль, чёрный перец, растительное масло (есть у всех)
+- Отвечай ТОЛЬКО JSON, без какого-либо другого текста`;
+
+    const raw = await callGigaChat(system, `Извлеки список покупок:\n${recipe.slice(0, 3000)}`);
+
+    // Надёжный парсинг — ищем JSON в ответе
+    let items = [];
     try {
-      const clean = raw.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(clean);
-      res.json(parsed);
-    } catch {
-      res.json({ items: [] });
+      // Убираем markdown и лишний текст вокруг JSON
+      const jsonMatch = raw.match(/\{[\s\S]*"items"[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        items = parsed.items || [];
+      } else {
+        // Fallback — пробуем распарсить напрямую
+        const clean = raw.replace(/```json\n?|```\n?/g, '').trim();
+        const parsed = JSON.parse(clean);
+        items = parsed.items || [];
+      }
+    } catch (parseErr) {
+      // Последний fallback — парсим текст построчно
+      console.warn('JSON parse failed, fallback to text parsing:', raw.slice(0, 200));
+      const lines = raw.split('\n').filter(l => l.trim());
+      items = lines
+        .filter(l => /[а-яё]/i.test(l))
+        .map(l => {
+          const clean = l.replace(/^[-•*\d.]+\s*/, '').trim();
+          const amtMatch = clean.match(/(\d+\s*(?:г|кг|мл|л|шт|штук|ст\.?л\.?|ч\.?л\.?|зубчик|пучок|щепотк)[^\s]*)/i);
+          return {
+            name: clean.replace(amtMatch?.[0] || '', '').replace(/[—–-]\s*$/, '').trim(),
+            amount: amtMatch?.[0] || ''
+          };
+        })
+        .filter(i => i.name.length > 1);
     }
+
+    res.json({ items });
+  } catch (e) {
+    console.error('Shopping list error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===== VIP: СПИСОК ПОКУПОК ДЛЯ МЕНЮ НА НЕДЕЛЮ =====
+router.post('/vip/weekmenu-shopping', async (req, res) => {
+  try {
+    const tgId = req.telegramUser.id;
+    const { menu } = req.body;
+    const { rows: [sub] } = await global.pool.query(
+      `SELECT * FROM subscriptions WHERE user_id=$1 AND is_active=TRUE AND expires_at>NOW() LIMIT 1`,
+      [tgId]
+    );
+    if (!sub || sub.plan_type !== 'VIP') return res.status(403).json({ error: 'Только для VIP' });
+
+    const system = `Ты помощник по закупкам продуктов. Из текста меню на неделю извлеки ВСЕ уникальные ингредиенты, суммируй их по всем дням.
+Верни ТОЛЬКО валидный JSON без лишнего текста:
+{"items":[{"name":"название","amount":"суммарное количество","days":"пн, ср, пт"}]}
+
+Правила:
+- Суммируй одинаковые продукты по всем дням (напр. "куриное филе — 1200г")
+- В поле days укажи сокращённо в какие дни нужен продукт (пн, вт, ср...)
+- НЕ включай: воду, соль, перец, растительное масло
+- Группируй по категориям в name если нужно
+- Отвечай ТОЛЬКО JSON`;
+
+    // Меню может быть очень длинным — берём первые 6000 символов
+    const menuTrunc = (menu || '').slice(0, 6000);
+    const raw = await callGigaChat(system, `Меню на неделю:\n${menuTrunc}`, 2000);
+
+    let items = [];
+    try {
+      const jsonMatch = raw.match(/\{[\s\S]*"items"[\s\S]*\}/);
+      if (jsonMatch) {
+        items = JSON.parse(jsonMatch[0]).items || [];
+      } else {
+        items = JSON.parse(raw.replace(/```json\n?|```\n?/g, '').trim()).items || [];
+      }
+    } catch {
+      // Fallback построчно
+      items = raw.split('\n')
+        .filter(l => /[а-яё]/i.test(l) && l.trim().length > 2)
+        .map(l => ({ name: l.replace(/^[-•*\d.]+\s*/, '').trim(), amount: '', days: '' }))
+        .filter(i => i.name.length > 1);
+    }
+
+    res.json({ items });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
