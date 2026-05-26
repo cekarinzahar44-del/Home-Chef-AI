@@ -1163,3 +1163,31 @@ textarea::placeholder, input::placeholder { color: var(--text-muted); font-weigh
   transition: all 0.2s;
 }
 .ghost-btn:hover { border-color: var(--accent); color: var(--accent-deep); }
+
+/* ===== WEEK MENU DAY CONTENT — улучшенные стили ===== */
+.wm-spacer { height: 6px; }
+.wm-text { font-size: 14px; color: var(--text-2); line-height: 1.65; padding: 2px 0; }
+
+.wm-ingr-item {
+  font-size: 13px; color: var(--text-2);
+  padding: 3px 0 3px 16px;
+  position: relative; line-height: 1.5;
+}
+.wm-ingr-item::before {
+  content: '·'; position: absolute; left: 6px;
+  color: var(--accent); font-weight: 700;
+}
+
+.wm-step {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 8px 10px; margin: 4px 0;
+  background: var(--surface); border-radius: var(--r-sm);
+  border-left: 3px solid var(--accent);
+}
+.wm-step-num {
+  font-size: 13px; font-weight: 700; color: var(--accent-deep);
+  min-width: 22px; padding-top: 1px;
+}
+.wm-step-text {
+  font-size: 14px; color: var(--text-1); line-height: 1.6; flex: 1;
+}
