@@ -23,7 +23,7 @@ async function getGigaToken() {
   return cachedToken;
 }
 
-async function callGigaChat(systemPrompt, userPrompt) {
+async function callGigaChat(systemPrompt, userPrompt, maxTokens = 3000) {
   const token = await getGigaToken();
   const res = await fetch('https://gigachat.devices.sberbank.ru/api/v1/chat/completions', {
     method: 'POST',
@@ -33,9 +33,9 @@ async function callGigaChat(systemPrompt, userPrompt) {
       'Accept': 'application/json'
     },
     body: JSON.stringify({
-      model: 'GigaChat',
-      temperature: 0.8,
-      max_tokens: 3000,
+      model: 'GigaChat-Pro',
+      temperature: 0.7,
+      max_tokens: maxTokens,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
