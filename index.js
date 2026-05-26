@@ -173,7 +173,37 @@ async function start() {
     `DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payments' AND column_name='receipt_file_id') AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payments' AND column_name='receipt_file_path') THEN ALTER TABLE payments RENAME COLUMN receipt_file_id TO receipt_file_path; END IF; END $$;`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payments' AND column_name='receipt_file_path') THEN ALTER TABLE payments ADD COLUMN receipt_file_path TEXT; END IF; END $$;`,
     `ALTER TABLE payments ALTER COLUMN receipt_file_path DROP NOT NULL`,
-    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_banned') THEN ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT FALSE; END IF; END $$;`
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_banned') THEN ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT FALSE; END IF; END $$;`,
+    // Базовые поля онбординга
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='allergies') THEN ALTER TABLE users ADD COLUMN allergies TEXT DEFAULT ''; END IF; END $$;`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='onboarding_done') THEN ALTER TABLE users ADD COLUMN onboarding_done BOOLEAN DEFAULT FALSE; END IF; END $$;`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='free_weekmenu_used') THEN ALTER TABLE users ADD COLUMN free_weekmenu_used BOOLEAN DEFAULT FALSE; END IF; END $$;`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='preferred_portions') THEN ALTER TABLE users ADD COLUMN preferred_portions INTEGER DEFAULT 2; END IF; END $$;`,
+    // VIP режимы — семья и фитнес
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='mode') THEN ALTER TABLE users ADD COLUMN mode VARCHAR(20) DEFAULT 'standard'; END IF; END $$;`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='family_kids') THEN ALTER TABLE users ADD COLUMN family_kids TEXT DEFAULT ''; END IF; END $$;`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='disliked_products') THEN ALTER TABLE users ADD COLUMN disliked_products TEXT DEFAULT ''; END IF; END $$;`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='favorite_products') THEN ALTER TABLE users ADD COLUMN favorite_products TEXT DEFAULT ''; END IF; END $$;`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='fitness_goal') THEN ALTER TABLE users ADD COLUMN fitness_goal VARCHAR(20); END IF; END $$;`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='daily_calories') THEN ALTER TABLE users ADD COLUMN daily_calories INTEGER; END IF; END $$;`,
+    // Уведомления — для активного бота
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='daily_reminder') THEN ALTER TABLE users ADD COLUMN daily_reminder BOOLEAN DEFAULT TRUE; END IF; END $$;`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='last_recipe_at') THEN ALTER TABLE users ADD COLUMN last_recipe_at TIMESTAMPTZ; END IF; END $$;`,
+
+    // Таблица сохранённых рецептов (история + избранное)
+    `CREATE TABLE IF NOT EXISTS recipes (
+      id SERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      title TEXT NOT NULL,
+      full_text TEXT NOT NULL,
+      is_favorite BOOLEAN DEFAULT FALSE,
+      rating SMALLINT,
+      cooked_count INTEGER DEFAULT 0,
+      tags TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes(user_id, created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_recipes_fav ON recipes(user_id, is_favorite) WHERE is_favorite=TRUE`
   ];
   for (const m of migrations) {
     try { await pool.query(m); } catch (e) {}
@@ -187,20 +217,104 @@ async function start() {
     'CREATE INDEX IF NOT EXISTS idx_subs_user ON subscriptions(user_id)'
   ];  
   for (const q of indexes) await pool.query(q).catch(() => {});
-  // ===== CRON =====
+  // ===== CRON: истекающие подписки =====
   cron.schedule('0 10 * * *', async () => {
     try {
       const { rows } = await pool.query(
         `SELECT u.tg_id, s.expires_at, s.plan_type FROM subscriptions s JOIN users u ON s.user_id = u.tg_id WHERE s.is_active = TRUE AND s.expires_at BETWEEN NOW() AND NOW() + INTERVAL '3 days'`
       );
       for (const s of rows) {
-        const days = Math.ceil((new Date(s.expires_at) - new Date()) / 86400000);        await bot.telegram.sendMessage(s.tg_id,
+        const days = Math.ceil((new Date(s.expires_at) - new Date()) / 86400000);
+        await bot.telegram.sendMessage(s.tg_id,
           `⏰ <b>Подписка ${s.plan_type} истекает через ${days} д.</b>`,
           { parse_mode: 'HTML' }
-        );
+        ).catch(() => {});
       }
       await pool.query(`UPDATE subscriptions SET is_active = FALSE WHERE expires_at < NOW()`);
-    } catch (e) { console.error('CRON:', e); }
+    } catch (e) { console.error('CRON expiry:', e); }
+  }, { timezone: 'Europe/Moscow' });
+
+  // ===== CRON: ежедневное напоминание в 17:00 =====
+  const DAILY_PROMPTS = [
+    { emoji: '🍝', text: 'Что будем готовить сегодня?' },
+    { emoji: '🍲', text: 'Время подумать про ужин!' },
+    { emoji: '🥘', text: 'Шеф уже на кухне, ждём только тебя 😊' },
+    { emoji: '🍳', text: 'Не знаешь что приготовить? Я подскажу!' },
+    { emoji: '🥗', text: 'Что-то быстрое и вкусное на ужин?' }
+  ];
+  cron.schedule('0 17 * * *', async () => {
+    try {
+      // Берём только тех у кого включены напоминания и кто заходил последние 14 дней
+      const { rows } = await pool.query(
+        `SELECT tg_id, first_name FROM users
+         WHERE daily_reminder = TRUE
+           AND is_banned = FALSE
+           AND onboarding_done = TRUE
+         LIMIT 5000`
+      );
+      console.log(`[CRON] Daily reminders: ${rows.length} users`);
+      for (const u of rows) {
+        const p = DAILY_PROMPTS[Math.floor(Math.random() * DAILY_PROMPTS.length)];
+        const name = u.first_name ? `, ${u.first_name}` : '';
+        try {
+          await bot.telegram.sendMessage(u.tg_id,
+            `${p.emoji} <b>Привет${name}!</b>\n${p.text}`,
+            {
+              parse_mode: 'HTML',
+              reply_markup: {
+                inline_keyboard: [[
+                  { text: '👨‍🍳 Открыть Шеф-Повара', web_app: { url: MINI_APP_URL } }
+                ]]
+              }
+            }
+          );
+          // Между сообщениями небольшая задержка чтобы не словить rate limit
+          await new Promise(r => setTimeout(r, 50));
+        } catch (e) {
+          // Бот заблокирован пользователем — отключаем напоминания
+          if (e.code === 403) {
+            await pool.query('UPDATE users SET daily_reminder=FALSE WHERE tg_id=$1', [u.tg_id]).catch(() => {});
+          }
+        }
+      }
+    } catch (e) { console.error('CRON daily:', e); }
+  }, { timezone: 'Europe/Moscow' });
+
+  // ===== CRON: вернуть тех кто не готовил 5+ дней (раз в неделю в среду 12:00) =====
+  cron.schedule('0 12 * * 3', async () => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT tg_id, first_name FROM users
+         WHERE daily_reminder = TRUE
+           AND is_banned = FALSE
+           AND onboarding_done = TRUE
+           AND (last_recipe_at IS NULL OR last_recipe_at < NOW() - INTERVAL '5 days')
+           AND created_at < NOW() - INTERVAL '7 days'
+         LIMIT 2000`
+      );
+      console.log(`[CRON] Win-back: ${rows.length} users`);
+      for (const u of rows) {
+        const name = u.first_name ? ` ${u.first_name}` : '';
+        try {
+          await bot.telegram.sendMessage(u.tg_id,
+            `👋 Скучаю по тебе${name}!\n\nДавно не готовили вместе. Может быть что-то простое и вкусное на ужин? 🍽`,
+            {
+              parse_mode: 'HTML',
+              reply_markup: {
+                inline_keyboard: [[
+                  { text: '🍳 Открыть приложение', web_app: { url: MINI_APP_URL } }
+                ]]
+              }
+            }
+          );
+          await new Promise(r => setTimeout(r, 50));
+        } catch (e) {
+          if (e.code === 403) {
+            await pool.query('UPDATE users SET daily_reminder=FALSE WHERE tg_id=$1', [u.tg_id]).catch(() => {});
+          }
+        }
+      }
+    } catch (e) { console.error('CRON winback:', e); }
   }, { timezone: 'Europe/Moscow' });
   // ===== ЗАГРУЗКА МОДУЛЕЙ (только bot.js для approve/reject) =====
   require('./bot')(bot, pool, ADMIN_ID);
