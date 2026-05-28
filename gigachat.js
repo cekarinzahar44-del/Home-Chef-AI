@@ -93,14 +93,21 @@ loadTokenFromDisk();
 
 
 async function callGigaChat(systemPrompt, userPrompt, maxTokens = 2000) {
-  // Сначала Lite (основной), Pro как запасной
-  const models = ['GigaChat', 'GigaChat-Pro'];
+  // Только Lite — у Pro нет токенов сейчас
+  const model = 'GigaChat';
 
-  for (const model of models) {
-    let attempts = 0;
+  // Защита от слишком больших промптов (Lite контекст ~8192)
+  const totalChars = systemPrompt.length + userPrompt.length;
+  if (totalChars > 12000) {
+    console.warn(`[GigaChat] Prompt too large (${totalChars} chars), truncating...`);
+    if (userPrompt.length > 4000) userPrompt = userPrompt.slice(0, 4000) + '...';
+  }
 
-    while (attempts < 2) {
-      attempts++;
+  let lastError = null;
+
+  // До 3 попыток с экспоненциальной задержкой при 500-х
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
       const token = await getGigaToken();
 
       const res = await fetch('https://gigachat.devices.sberbank.ru/api/v1/chat/completions', {
@@ -121,9 +128,9 @@ async function callGigaChat(systemPrompt, userPrompt, maxTokens = 2000) {
         })
       });
 
-      // Токен протух прямо во время запроса — принудительно обновляем и повторяем
-      if (res.status === 401 && attempts === 1) {
-        console.warn('[GigaChat] 401 — принудительное обновление токена...');
+      // 401 — токен протух, обновляем и повторяем
+      if (res.status === 401 && attempt === 1) {
+        console.warn('[GigaChat] 401 — обновление токена...');
         _token = null; _expiry = 0;
         continue;
       }
@@ -132,18 +139,35 @@ async function callGigaChat(systemPrompt, userPrompt, maxTokens = 2000) {
 
       if (!res.ok) {
         const errMsg = data.message || data.error || JSON.stringify(data);
-        if (model !== models[models.length - 1]) {
-          console.warn(`[GigaChat] ${model} failed (${res.status}: ${errMsg}), trying fallback...`);
-          break; // выходим из while — пробуем следующую модель
+
+        // 500-е (серверные) и 429 (rate limit) — пробуем ещё раз
+        if ((res.status >= 500 || res.status === 429) && attempt < 3) {
+          const delay = attempt * 1500; // 1.5s, 3s
+          console.warn(`[GigaChat] ${res.status}: ${errMsg} — попытка ${attempt}/3, жду ${delay}ms`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
         }
-        throw new Error(`GigaChat (${model}): ${errMsg}`);
+
+        throw new Error(`GigaChat ${res.status}: ${errMsg}`);
       }
 
       const content = data.choices?.[0]?.message?.content;
       if (!content) throw new Error('GigaChat вернул пустой ответ');
       return content;
+
+    } catch (e) {
+      lastError = e;
+      // Если это сетевая ошибка — тоже повторяем
+      if (attempt < 3 && (e.message?.includes('fetch failed') || e.message?.includes('ECONN'))) {
+        const delay = attempt * 1500;
+        console.warn(`[GigaChat] Network error, попытка ${attempt}/3:`, e.message);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw e;
     }
   }
+  throw lastError || new Error('GigaChat недоступен');
 }
 
 module.exports = { callGigaChat };
