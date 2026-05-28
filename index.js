@@ -203,7 +203,17 @@ async function start() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`,
     `CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes(user_id, created_at DESC)`,
-    `CREATE INDEX IF NOT EXISTS idx_recipes_fav ON recipes(user_id, is_favorite) WHERE is_favorite=TRUE`
+    `CREATE INDEX IF NOT EXISTS idx_recipes_fav ON recipes(user_id, is_favorite) WHERE is_favorite=TRUE`,
+
+    // История блюд из меню на неделю — чтобы не повторялись
+    `CREATE TABLE IF NOT EXISTS weekmenu_dishes (
+      id SERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      dish_name TEXT NOT NULL,
+      meal_type VARCHAR(20),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_weekmenu_dishes_user ON weekmenu_dishes(user_id, created_at DESC)`
   ];
   for (const m of migrations) {
     try { await pool.query(m); } catch (e) {}
