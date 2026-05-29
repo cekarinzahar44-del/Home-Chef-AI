@@ -134,6 +134,30 @@ ${kidsPart}${dislikedPart}${favPart}
   return '';
 }
 
+// Проверка — содержит ли рецепт аллерген (для пост-валидации)
+function detectAllergenInText(text, allergies) {
+  if (!allergies) return null;
+  const lowerText = text.toLowerCase();
+  // Разбиваем аллергии на отдельные слова
+  const allergenList = allergies.toLowerCase()
+    .split(/[,;]+/)
+    .map(a => a.trim())
+    .filter(a => a.length > 2);
+
+  for (const allergen of allergenList) {
+    // Берём корень слова (убираем окончания) для надёжности
+    const root = allergen.replace(/[аоеыийуюяь]+$/, '');
+    if (root.length < 3) continue;
+    // Ищем в тексте — но только в блоке ингредиентов и шагов, не в строке "ВАЖНО"
+    // Убираем строку с пометкой об исключении чтобы не словить ложное срабатывание
+    const textWithoutNotice = lowerText.replace(/⚠️[^\n]*/g, '');
+    if (textWithoutNotice.includes(root)) {
+      return allergen;
+    }
+  }
+  return null;
+}
+
 // ===== ЕДИНЫЙ ЗАЩИТНЫЙ БЛОК =====
 const FOOD_ONLY_GUARD = `
 КРИТИЧЕСКОЕ ПРАВИЛО: Ты работаешь ИСКЛЮЧИТЕЛЬНО в сфере еды, кулинарии и напитков. 
@@ -162,8 +186,8 @@ function buildPrompt(requestType, ingredients, details, planType, prefs = {}) {
   const allergies = prefs.allergies || '';
   const modeText = isVIP ? modeBlock(prefs) : '';
 
-  const system = `Ты шеф-повар с 15-летним стажем. Даёшь профессиональные рецепты для домашней кухни.
-${FOOD_ONLY_GUARD}${allergyBlock(allergies)}${modeText}
+  const system = `${allergyBlock(allergies)}Ты шеф-повар с 15-летним стажем. Даёшь профессиональные рецепты для домашней кухни.
+${FOOD_ONLY_GUARD}${modeText}
 
 ФОРМАТ ОТВЕТА (строго):
 
@@ -341,6 +365,35 @@ router.post('/recipe/generate', async (req, res) => {
 
     let recipe = await callGigaChat(prompt.system, prompt.user, 2500);
     recipe = cleanHtml(recipe);
+
+    // ПОСТ-ПРОВЕРКА АЛЛЕРГЕНОВ — если AI всё же вставил аллерген, перегенерируем
+    if (userPrefs.allergies) {
+      const found = detectAllergenInText(recipe, userPrefs.allergies);
+      if (found) {
+        console.warn(`[Allergy] Аллерген "${found}" найден в рецепте, перегенерация...`);
+        // Усиленный запрос с явным указанием убрать конкретный аллерген
+        const retryUser = `${prompt.user}
+
+❌❌❌ ВНИМАНИЕ: В прошлом ответе ты ОШИБСЯ и использовал "${found}" — это АЛЛЕРГЕН пользователя!
+Сделай рецепт ЗАНОВО ПОЛНОСТЬЮ БЕЗ "${found}". 
+Замени его другим продуктом. В начале напиши: "⚠️ ВАЖНО: Я исключил ${found} — он в твоих аллергиях, заменил на [замену]."
+Проверь что слова "${found}" НЕТ нигде в рецепте.`;
+
+        try {
+          let retry = await callGigaChat(prompt.system, retryUser, 2500);
+          retry = cleanHtml(retry);
+          // Если и повторно содержит — оставляем повтор (он хотя бы с пометкой), но логируем
+          const stillFound = detectAllergenInText(retry, userPrefs.allergies);
+          if (stillFound) {
+            console.error(`[Allergy] Повторно не удалось убрать "${found}"`);
+          }
+          recipe = retry;
+        } catch (e) {
+          console.error('[Allergy] Retry failed:', e.message);
+        }
+      }
+    }
+
     const steps = parseSteps(recipe);
 
     if (!sub) {
