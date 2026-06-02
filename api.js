@@ -6,6 +6,7 @@ const ExcelJS = require('exceljs');
 const { validateTelegramAuth } = require('./auth');
 const { callGigaChat } = require('./gigachat');
 const { transcribeVoice } = require('./stt');
+const { createRateLimiter } = require('./middleware/security');
 const router = express.Router();
 // ===== КОНСТАНТЫ =====
 const FREE_LIMIT = 3;
@@ -34,6 +35,24 @@ router.use((req, res, next) => {
   const user = validateTelegramAuth(initData, process.env.BOT_TOKEN);
   if (!user) return res.status(401).json({ error: 'Invalid initData' });
   req.telegramUser = user;
+  next();
+});
+// ===== ЛИМИТ НА ДОРОГИЕ ИИ-ЗАПРОСЫ (по пользователю) =====
+// Защищает бюджет на ИИ от злоупотреблений. Лимит щедрый — реальные
+// пользователи его не достигают. Отключается через RATE_LIMIT_ENABLED=false.
+const aiLimiter = createRateLimiter({
+  windowMs: 60_000,
+  max: parseInt(process.env.RATE_LIMIT_GENERATE_MAX) || 30,
+  keyGenerator: (req) => `ai_${req.telegramUser?.id || req.ip}`,
+  message: { error: 'too_many_requests', message: 'Слишком много запросов к ИИ. Подождите минуту 🙏' }
+});
+const AI_PATHS = new Set([
+  '/recipe/generate', '/vip/weekmenu', '/vip/diet',
+  '/recipe/shopping-list', '/vip/weekmenu-shopping', '/stt/recognize'
+]);
+router.use((req, res, next) => {
+  if (process.env.RATE_LIMIT_ENABLED === 'false') return next();
+  if (AI_PATHS.has(req.path)) return aiLimiter(req, res, next);
   next();
 });
 // ===== ADMIN AUTH MIDDLEWARE =====
@@ -1504,4 +1523,21 @@ router.get('/admin/export/:type', adminAuth, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// ===== 404 ДЛЯ НЕИЗВЕСТНЫХ API-МАРШРУТОВ =====
+router.use((req, res) => {
+  res.status(404).json({ error: 'not_found', message: 'Маршрут не найден' });
+});
+
+// ===== ЦЕНТРАЛЬНЫЙ ОБРАБОТЧИК ОШИБОК =====
+// Ловит в т.ч. ошибки multer (например, превышение размера файла),
+// чтобы клиент получал понятный JSON вместо «голого» HTML-стека.
+router.use((err, req, res, next) => {
+  if (err && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'file_too_large', message: 'Файл слишком большой (максимум 10 МБ)' });
+  }
+  console.error('API error:', err);
+  res.status(500).json({ error: 'internal_error', message: 'Внутренняя ошибка сервера' });
+});
+
 module.exports = router;

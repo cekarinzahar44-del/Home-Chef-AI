@@ -1,4 +1,23 @@
+# Зависимости
 node_modules/
+
+# Переменные окружения и секреты
 .env
-*.log
+.env.*
+!.env.example
+
+# Токен GigaChat (кэшируется на диск, содержит секрет)
+.giga_token.json
+
+# Загруженные чеки оплаты (персональные данные!)
 uploads/
+
+# Логи
+*.log
+logs/
+
+# Системные / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp

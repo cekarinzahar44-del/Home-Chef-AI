@@ -1,3 +1,8 @@
+// ВНИМАНИЕ: GigaChat (Сбер) использует сертификаты «Russian Trusted CA»,
+// которых нет в стандартном хранилище Node. Отключение проверки TLS — известный
+// компромисс ради работы ИИ. Рекомендация для production: установить корневые
+// сертификаты Минцифры и передавать их через NODE_EXTRA_CA_CERTS вместо этой строки.
+// Подробнее: docs/SECURITY.md
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 require('dotenv').config();
 const express = require('express');
@@ -42,12 +47,36 @@ function createPool() {
 const pool = createPool();
 global.pool = pool;
 // ===== EXPRESS =====
+const { securityHeaders, createRateLimiter } = require('./middleware/security');
 const app = express();
+// За реверс-прокси (Nginx и т.п.) — чтобы req.ip и rate-limit работали корректно
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(securityHeaders);
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+// Защита API от абьюза (важно: ИИ-запросы стоят денег). Лимит щедрый —
+// обычные пользователи его не замечают. Отключается через RATE_LIMIT_ENABLED=false.
+if (process.env.RATE_LIMIT_ENABLED !== 'false') {
+  app.use('/api', createRateLimiter({
+    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 60_000,
+    max: parseInt(process.env.RATE_LIMIT_MAX) || 240
+  }));
+}
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/api', require('./api'));app.get('/health', (req, res) => res.send('OK'));
+app.use('/api', require('./api'));
+
+// Health-check с реальной проверкой БД — для мониторинга и оркестраторов
+app.get('/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', db: 'up', uptime: Math.round(process.uptime()) });
+  } catch (e) {
+    res.status(503).json({ status: 'error', db: 'down' });
+  }
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
