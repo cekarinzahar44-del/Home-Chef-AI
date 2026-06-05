@@ -92,7 +92,7 @@ async function getGigaToken() {
 loadTokenFromDisk();
 
 
-async function callGigaChat(systemPrompt, userPrompt, maxTokens = 2000) {
+async function callGigaChat(systemPrompt, userPrompt, maxTokens = 2000, temperature = 0.7) {
   // Только Lite — у Pro нет токенов сейчас
   const model = 'GigaChat';
 
@@ -119,7 +119,7 @@ async function callGigaChat(systemPrompt, userPrompt, maxTokens = 2000) {
         },
         body: JSON.stringify({
           model,
-          temperature: 0.7,
+          temperature,
           max_tokens: maxTokens,
           messages: [
             { role: 'system', content: systemPrompt },
