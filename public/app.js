@@ -109,19 +109,17 @@ const API = {
 // ============================================================
 
 const Voice = {
-  _stream: null,          // постоянный поток — разрешение спрашивается 1 раз
+  _stream: null,
   _mediaRecorder: null,
   _chunks: [],
   isRecording: false,
 
-  // Получить/переиспользовать поток микрофона
   async _getStream() {
     if (this._stream && this._stream.active) return this._stream;
     this._stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     return this._stream;
   },
 
-  // Проверка — было ли уже выдано разрешение
   async hasPermission() {
     try {
       if (navigator.permissions) {
@@ -152,7 +150,6 @@ const Voice = {
       if (!this._mediaRecorder) return resolve('');
       this._mediaRecorder.onstop = async () => {
         const blob = new Blob(this._chunks, { type: 'audio/webm' });
-        // НЕ останавливаем треки потока — переиспользуем чтобы не спрашивать разрешение снова
         this.isRecording = false;
         try { const d = await API.recognizeVoice(blob); resolve(d.text || ''); }
         catch { resolve(''); }
@@ -166,9 +163,7 @@ const Voice = {
 //  РЕЦЕПТЫ В БД (история + избранное)
 // ============================================================
 
-// Локальный кэш чтобы не дёргать API при каждом изменении
 const RecipeStore = {
-  // Push больше не нужен — рецепт сохраняется на бэке при генерации
   cache: { all: null, favorites: null },
 
   async list(filter = 'all') {
@@ -244,7 +239,6 @@ const StepTimer = {
     const plan = window._userPlan || 'FREE';
     if (plan === 'FREE') { showScreen('subscription'); return; }
     if (this.running) { this.stop(); return; }
-    // Пытаемся вытащить время из текста текущего шага
     const stepText = $('step-text')?.textContent || '';
     const mins = stepText.match(/(\d+)\s*мин/i);
     const defaultMins = mins ? parseInt(mins[1]) : 5;
@@ -313,7 +307,6 @@ const RecipeManager = {
       nextBtn.textContent = 'Далее →';
       nextBtn.classList.remove('done');
     }
-    // Сбрасываем таймер при смене шага
     StepTimer.stop();
   },
 
@@ -325,7 +318,6 @@ const RecipeManager = {
       haptic('light');
     } else {
       hapticNotify('success');
-      // Если есть id — показываем рейтинг, иначе просто закрываем
       if (this.current?.id) {
         showRatingModal();
       } else {
@@ -344,7 +336,6 @@ const RecipeManager = {
   }
 };
 
-// HTML escape для безопасного отображения текста
 function esc(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -366,9 +357,6 @@ const WeekMenu = {
   _rawText: null,
 
   parse(raw) {
-    // Разбиваем по маркеру который сами же вставляем в api.js:
-    // "════...════\nДЕНЬ N — НАЗВАНИЕ\n════...════"
-    // Ищем "ДЕНЬ N" как разделитель — надёжный паттерн
     const dayPattern = /ДЕНЬ\s+(\d+)\s*[—–-]\s*([^\n]+)/gi;
     const segments = [];
     let lastIndex = 0;
@@ -390,7 +378,6 @@ const WeekMenu = {
       return segments.map(seg => ({
         title: seg.title,
         content: raw.slice(seg.start, seg.end)
-          // убираем заголовок и разделители из контента
           .replace(/^[═\s]*ДЕНЬ\s+\d+\s*[—–-][^\n]*\n?/i, '')
           .replace(/^[═]+\n?/gm, '')
           .replace(/\*\*/g, '').replace(/\*/g, '')
@@ -398,7 +385,6 @@ const WeekMenu = {
       }));
     }
 
-    // Fallback — по названиям дней
     const dayNames = ['ПОНЕДЕЛЬНИК','ВТОРНИК','СРЕДА','ЧЕТВЕРГ','ПЯТНИЦА','СУББОТА','ВОСКРЕСЕНЬЕ'];
     const ruNames  = ['Понедельник','Вторник','Среда','Четверг','Пятница','Суббота','Воскресенье'];
     const fallbackPattern = new RegExp(`(${dayNames.join('|')})`, 'gi');
@@ -412,7 +398,6 @@ const WeekMenu = {
     }
     if (result.length >= 3) return result;
 
-    // Последний fallback — делим на 7 равных частей
     const lines = raw.split('\n').filter(l => l.trim());
     const chunk = Math.ceil(lines.length / 7);
     return ruNames.map((name, i) => ({
@@ -444,7 +429,6 @@ const WeekMenu = {
 
     const contentEl = $('wm-day-content');
     if (contentEl) {
-      // Форматируем построчно — надёжнее чем regex по всему тексту
       const lines = day.content.split('\n');
       let html = '';
 
@@ -465,7 +449,7 @@ const WeekMenu = {
         else if (/^📊.*ИТОГО/i.test(t))   html += `<div class="wm-total">${esc(t)}</div>`;
         else if (/^📊/.test(t))           html += `<div class="wm-kbju">${esc(t)}</div>`;
         else if (/^💡/.test(t))           html += `<div class="wm-tip">${esc(t)}</div>`;
-        else if (/^[═─]+$/.test(t))       html += ''; // разделители — пропускаем
+        else if (/^[═─]+$/.test(t))       html += '';
         else                               html += `<div class="wm-text">${esc(t)}</div>`;
       }
 
@@ -513,10 +497,8 @@ function showScreen(name) {
   haptic('light');
   window.scrollTo(0, 0);
 
-  // Действия при открытии экранов
   if (name === 'profile') loadProfile();
   if (name === 'weekmenu') {
-    // Баннеры в зависимости от статуса
     const isVIP = window._userPlan === 'VIP';
     const freeUsed = !!window._freeWeekmenuUsed;
     const freeBanner = $('wm-free-banner');
@@ -534,7 +516,6 @@ function showScreen(name) {
       if (resetBtn) resetBtn.style.display = 'block';
     }
 
-    // Подгружаем счётчик блюд в истории
     loadWeekmenuHistoryCount();
   }
 }
@@ -547,7 +528,6 @@ window.loadWeekmenuHistoryCount = async function() {
     const count = data.count || 0;
     if (count > 0) {
       $('wm-history-count').textContent = count;
-      // Слово "блюд" в правильной форме
       const word = count === 1 ? 'блюдо' : (count < 5 ? 'блюда' : 'блюд');
       $('wm-history-count-text').innerHTML = `В истории <b id="wm-history-count">${count}</b> ${word} — шеф не повторяется`;
       wrap.style.display = 'flex';
@@ -580,7 +560,6 @@ const ONB_KEY = 'chef_onb_done_v1';
 let _onbCurrent = 0;
 let _onbAllergyChips = new Set();
 
-// Чипы аллергий
 document.addEventListener('click', e => {
   const chip = e.target.closest('.onb-allergy-chip');
   if (!chip) return;
@@ -593,7 +572,6 @@ document.addEventListener('click', e => {
     _onbAllergyChips.add(v);
     chip.classList.add('active');
   }
-  // Обновляем textarea
   const ta = $('onb-allergies');
   if (ta) {
     const manual = ta.value.split(',').map(x => x.trim())
@@ -615,7 +593,6 @@ window.onbNext = function() {
   const dots   = document.querySelectorAll('.onb-dot');
   const nextBtn = $('onb-next');
 
-  // Анимация смены слайда
   slides[_onbCurrent].classList.remove('active');
   slides[_onbCurrent].classList.add('exit');
   setTimeout(() => slides[_onbCurrent]?.classList.remove('exit'), 400);
@@ -632,7 +609,6 @@ window.onbNext = function() {
   dots[_onbCurrent]?.classList.add('active');
   haptic('light');
 
-  // На последнем слайде меняем текст кнопки
   if (_onbCurrent === slides.length - 1) {
     nextBtn.textContent = '✅ Готово, начать!';
     nextBtn.classList.add('onb-next-final');
@@ -640,7 +616,6 @@ window.onbNext = function() {
   }
 };
 
-// Свайп по слайдам
 let _onbTouchX = 0;
 document.addEventListener('touchstart', e => {
   if (!document.getElementById('screen-onboarding')?.classList.contains('active-onb')) return;
@@ -653,18 +628,15 @@ document.addEventListener('touchend', e => {
 }, { passive: true });
 
 window.finishOnboarding = async function() {
-  // Собираем данные с последнего слайда (если он показан)
   const allergiesValue = $('onb-allergies')?.value?.trim() || '';
   const portionsValue = parseInt($('onb-portions')?.value) || 2;
 
   try { localStorage.setItem(ONB_KEY, '1'); } catch {}
 
-  // Сохраняем в БД (не блокируем UI)
   API.request('/api/user/onboarding', {
     method: 'POST',
     body: JSON.stringify({ allergies: allergiesValue, portions: portionsValue })
   }).then(() => {
-    // Обновляем кэш
     window._userAllergies = allergiesValue;
     window._userPortions = portionsValue;
   }).catch(e => console.warn('Onboarding save failed:', e));
@@ -681,7 +653,6 @@ window.finishOnboarding = async function() {
   showScreen('home');
   hapticNotify('success');
 
-  // Приветственный тост
   const msg = allergiesValue
     ? '👨‍🍳 Запомнил твои предпочтения. Все рецепты будут безопасными!'
     : '👨‍🍳 Привет! Назови любое блюдо или выбери из списка';
@@ -689,7 +660,6 @@ window.finishOnboarding = async function() {
 };
 
 function shouldShowOnboarding(status) {
-  // Приоритет — флаг с сервера. localStorage — fallback для офлайн
   if (status?.onboardingDone === true) return false;
   if (status?.onboardingDone === false) return true;
   try { return !localStorage.getItem(ONB_KEY); } catch { return false; }
@@ -707,7 +677,6 @@ async function init() {
     window._userPortions = status.preferredPortions || 2;
     window._freeWeekmenuUsed = !!status.freeWeekmenuUsed;
     window._onboardingDone = !!status.onboardingDone;
-    // Режимы и доп. данные
     window._userMode = status.mode || 'standard';
     window._userFamilyKids = status.familyKids || '';
     window._userDisliked = status.disliked || '';
@@ -728,13 +697,11 @@ async function init() {
       if (freeCount) freeCount.textContent = `Бесплатных запросов: ${left}`;
     }
 
-    // Badge "подарок" для меню на неделю
     const giftBadge = $('weekmenu-gift-badge');
     if (giftBadge) {
       giftBadge.style.display = (!status.subscription && !status.freeWeekmenuUsed) ? 'inline-block' : 'none';
     }
 
-    // Обновляем тексты пунктов меню в профиле
     updateModeMenuText();
     updateReminderMenuText();
 
@@ -784,14 +751,12 @@ window.showAllergiesEditor = function() {
   document.body.appendChild(modal);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 
-  // Активируем чипы которые уже выбраны
   const taVals = current.toLowerCase().split(',').map(x => x.trim());
   modal.querySelectorAll('.onb-allergy-chip').forEach(chip => {
     if (taVals.includes(chip.dataset.val)) chip.classList.add('active');
     chip.addEventListener('click', e => {
       e.preventDefault();
       chip.classList.toggle('active');
-      // Обновляем textarea на основе активных чипов + ручного ввода
       const ta = $('allergies-input');
       const activeChips = Array.from(modal.querySelectorAll('.onb-allergy-chip.active')).map(c => c.dataset.val);
       const stdSet = new Set(['орехи','лактоза','глютен','яйца','морепродукты','мёд']);
@@ -870,7 +835,6 @@ window.showModeEditor = function() {
           </button>
         </div>
 
-        <!-- Дополнительные поля для семьи -->
         <div id="mode-family-fields" class="mode-extra" style="display:none;">
           <div class="form-block">
             <div class="form-label">Возраст детей</div>
@@ -886,7 +850,6 @@ window.showModeEditor = function() {
           </div>
         </div>
 
-        <!-- Дополнительные поля для фитнеса -->
         <div id="mode-fitness-fields" class="mode-extra" style="display:none;">
           <div class="form-block">
             <div class="form-label">Цель</div>
@@ -907,17 +870,14 @@ window.showModeEditor = function() {
   document.body.appendChild(modal);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 
-  // Заполняем сохранёнными значениями
   if ($('mode-kids')) $('mode-kids').value = window._userFamilyKids || '';
   if ($('mode-disliked')) $('mode-disliked').value = window._userDisliked || '';
   if ($('mode-favorites')) $('mode-favorites').value = window._userFavorites || '';
   if ($('mode-calories')) $('mode-calories').value = window._userDailyCalories || '';
 
-  // Активная цель
   const savedGoal = window._userFitnessGoal;
   if (savedGoal) modal.querySelector(`.goal-btn[data-goal="${savedGoal}"]`)?.classList.add('active');
 
-  // Переключение режимов
   const updateExtra = (mode) => {
     $('mode-family-fields').style.display = mode === 'family' ? 'block' : 'none';
     $('mode-fitness-fields').style.display = mode === 'fitness' ? 'block' : 'none';
@@ -1075,7 +1035,6 @@ $('dish-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('btn-send').click(); }
 });
 
-// Голосовое управление по кнопке-диктофону (распознаёт команды + заполняет поле)
 $('btn-voice').addEventListener('click', () => {
   VoiceNav.toggle();
 });
@@ -1157,12 +1116,6 @@ window.copyFullRecipe = async function(title, text) {
   } catch { toast('Не удалось скопировать', 'error'); }
 };
 
-// Голосовая навигация — единый toggle
-$('btn-voice-nav')?.addEventListener('click', () => {
-  VoiceNav.toggle();
-});
-
-// Таймер
 document.addEventListener('click', e => {
   if (e.target.id === 'btn-step-timer') StepTimer.promptStart();
 });
@@ -1172,7 +1125,6 @@ document.addEventListener('click', e => {
 // ============================================================
 
 window.showShoppingList = async function() {
-  // Доступно всем — список покупок это базовая фича
   if (!RecipeManager.current) {
     toast('Сначала сгенерируй рецепт', 'error');
     return;
@@ -1184,7 +1136,6 @@ window.showShoppingList = async function() {
   $('shopping-loading').style.display = 'block';
   $('shopping-list-wrap').style.display = 'none';
 
-  // Собираем чистый текст рецепта без HTML
   const rawFull = RecipeManager.current.fullText || '';
   const rawSteps = RecipeManager.current.steps
     ? RecipeManager.current.steps.map((s, i) => `Шаг ${i+1}: ${s}`).join('\n\n')
@@ -1254,7 +1205,6 @@ window.copyShoppingList = async function() {
 window.showWeekMenuShopping = async function() {
   if (!WeekMenu._rawText) { toast('Сначала сгенерируй меню на неделю', 'error'); return; }
 
-  // Показываем модальное окно
   const existing = $('weekmenu-shopping-modal');
   if (existing) existing.remove();
 
@@ -1346,7 +1296,6 @@ window.showRecipesList = async function(filter) {
   filter = filter || 'all';
   showScreen('history');
 
-  // Заголовок и таб
   const titleEl = document.querySelector('#screen-history .screen-title');
   if (titleEl) titleEl.textContent = filter === 'favorites' ? 'Избранное' : 'История рецептов';
 
@@ -1394,11 +1343,9 @@ window.showRecipesList = async function(filter) {
   }
 };
 
-// Старая совместимость
 window.loadHistory = () => window.showRecipesList('all');
 window.clearHistory = () => toast('История синхронизируется с сервером');
 
-// Избранное на экране рецепта
 window.toggleFavorite = async function() {
   if (!RecipeManager.current?.id) {
     toast('Этот рецепт не сохранён', 'error');
@@ -1419,7 +1366,6 @@ window.toggleFavorite = async function() {
   }
 };
 
-// Модалка рейтинга — показывается при нажатии "Готово!"
 function showRatingModal() {
   if (!RecipeManager.current?.id) return;
   const existing = $('rating-modal');
@@ -1578,7 +1524,6 @@ window.changeWmPortions = function(delta) {
   $('wm-portions').value = _wmPortions;
 };
 
-// Генерация меню с прогресс-анимацией
 $('btn-generate-weekmenu').addEventListener('click', async () => {
   const userPrefs = $('weekmenu-prefs').value.trim();
   const btn = $('btn-generate-weekmenu');
@@ -1641,7 +1586,6 @@ $('btn-generate-weekmenu').addEventListener('click', async () => {
     const resetBtn = $('btn-reset-weekmenu');
     if (resetBtn) resetBtn.style.display = 'block';
 
-    // Обновляем счётчик истории блюд
     loadWeekmenuHistoryCount();
 
     setTimeout(() => $('weekmenu-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
@@ -1657,7 +1601,6 @@ $('btn-generate-weekmenu').addEventListener('click', async () => {
   }
 });
 
-// Сброс меню
 document.addEventListener('click', e => {
   if (e.target.id === 'btn-reset-weekmenu') {
     if (!confirm('Удалить текущее меню и создать новое?')) return;
@@ -1671,7 +1614,6 @@ document.addEventListener('click', e => {
   }
 });
 
-// Скачать меню
 $('btn-download-weekmenu')?.addEventListener('click', async () => {
   const btn = $('btn-download-weekmenu');
   btn.disabled = true;
@@ -1705,7 +1647,6 @@ $('btn-download-weekmenu')?.addEventListener('click', async () => {
         toast('📸 Удержи на картинке → Сохранить');
       }
     } else {
-      // Fallback — текстовый файл
       const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1722,7 +1663,6 @@ $('btn-download-weekmenu')?.addEventListener('click', async () => {
   }
 });
 
-// Поделиться меню
 $('btn-share-weekmenu')?.addEventListener('click', async () => {
   const raw = WeekMenu._rawText || '';
   const text = raw.replace(/<[^>]+>/g,'').trim();
@@ -1736,7 +1676,6 @@ $('btn-share-weekmenu')?.addEventListener('click', async () => {
   }
 });
 
-// Печать меню
 $('btn-print-weekmenu')?.addEventListener('click', () => {
   const raw = WeekMenu._rawText || '';
   const text = raw.replace(/<[^>]+>/g,'').trim();
@@ -1756,10 +1695,6 @@ $('btn-print-weekmenu')?.addEventListener('click', () => {
 
 // ============================================================
 //  ГОЛОСОВАЯ НАВИГАЦИЯ ПО РЕЦЕПТУ
-// ============================================================
-
-// ============================================================
-//  ГОЛОСОВОЕ УПРАВЛЕНИЕ — навигация + wake-word команды
 // ============================================================
 
 const VoiceNav = {
@@ -1791,7 +1726,6 @@ const VoiceNav = {
       const res = e.results[e.results.length - 1];
       if (!res || !res.isFinal) return;
       const text = res[0].transcript.toLowerCase().trim();
-      // Анти-дублирование — иногда событие срабатывает дважды
       const now = Date.now();
       if (text === this._lastTranscript && now - this._lastTime < 2000) return;
       this._lastTranscript = text;
@@ -1801,7 +1735,6 @@ const VoiceNav = {
     };
 
     this._rec.onerror = (e) => {
-      // no-speech и aborted — нормально, продолжаем
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         toast('Нет доступа к микрофону', 'error');
         this.stop();
@@ -1809,7 +1742,6 @@ const VoiceNav = {
     };
 
     this._rec.onend = () => {
-      // Автоматически перезапускаем если не остановлено вручную
       if (this.isListening) {
         clearTimeout(this._restartTimer);
         this._restartTimer = setTimeout(() => {
@@ -1860,14 +1792,11 @@ const VoiceNav = {
     });
   },
 
-  // === ОБРАБОТКА КОМАНД с учётом контекста ===
   _handle(text) {
-    // На каком экране сейчас?
     const activeScreen = document.querySelector('.screen.active')?.id || '';
     const onRecipe = activeScreen === 'screen-recipe';
     const onHome = activeScreen === 'screen-home';
 
-    // === Команды НАВИГАЦИИ по рецепту (если на экране рецепта) ===
     if (onRecipe) {
       if (/(следующ|дальше|далее|вперёд|вперед|давай дальше)/.test(text)) {
         RecipeManager.next();
@@ -1886,16 +1815,13 @@ const VoiceNav = {
       }
     }
 
-    // === СТОП — выключает голосовое управление ===
     if (/(стоп|выход|закрой|закрыть|отмена|хватит|тихо|молчи)/.test(text)) {
       this.stop();
       toast('🎤 Голос выключен');
       return;
     }
 
-    // === WAKE-WORD команды (на главном экране) ===
     if (onHome) {
-      // Триггеры: "приготовь X", "хочу X", "сделай X", "рецепт X", "давай приготовим X"
       const wakeWordPatterns = [
         /(?:привет.*?(?:давай |)|давай |хочу |хотим |можешь |мне |нам |)?(?:приготов(?:ь|им|ить)|сдела(?:й|ем|ть)|рецепт)\s+(.+)/i,
         /(?:давай |хочу |)?(?:покажи|найди|подскажи)(?:\s+рецепт)?\s+(.+)/i,
@@ -1919,13 +1845,11 @@ const VoiceNav = {
         if (input) input.value = dish;
         haptic('medium');
         toast(`🍳 Готовлю рецепт: ${dish}`);
-        // Автоматически переход в детали и генерация
         state.ingredients = dish;
         setTimeout(() => showScreen('details'), 500);
         return;
       }
 
-      // Просто "привет" — поприветствуем
       if (/^(привет|здравствуй|шеф|hello)/.test(text)) {
         toast('👋 Привет! Скажи что приготовить, например: "приготовь омлет"', 'success', 4000);
         return;
@@ -1962,7 +1886,6 @@ window.addEventListener('load', async () => {
     setTimeout(() => loader.style.display = 'none', 400);
   }
 
-  // Новым пользователям — онбординг (флаг с сервера приоритетнее localStorage)
   if (shouldShowOnboarding(status)) {
     const onbEl = $('screen-onboarding');
     if (onbEl) {
