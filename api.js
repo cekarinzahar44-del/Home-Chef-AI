@@ -221,11 +221,15 @@ function detectRequestType(text) {
   return 'dish';
 }
 
-function buildPrompt(requestType, ingredients, details, planType, prefs = {}) {
+function buildPrompt(requestType, ingredients, details, planType, prefs = {}, cookware = '') {
   const isVIP = planType === 'VIP';
   const isPRO = planType === 'PRO' || isVIP;
   const allergies = prefs.allergies || '';
   const modeText = isVIP ? modeBlock(prefs) : '';
+  // Если пользователь явно указал посуду — готовим под неё и предупреждаем о несоответствии
+  const cookwareNote = (cookware && cookware !== 'auto')
+    ? `\n\nПОСУДА ПОЛЬЗОВАТЕЛЯ: ${cookware}. Готовь рецепт именно под эту посуду и явно укажи её в блоке «🍲 ПОСУДА». Если для ${prefs.portions || 2} порц. она маловата или велика — мягко предупреди и подскажи подходящий объём.`
+    : '';
 
   const system = `${allergyBlock(allergies)}Ты шеф-повар с 15-летним стажем. Даёшь профессиональные рецепты для домашней кухни.
 ${FOOD_ONLY_GUARD}${modeText}
@@ -267,7 +271,7 @@ ${FOOD_ONLY_GUARD}${modeText}
 5. Без HTML тегов и markdown звёздочек **
 6. Реалистичное время (если >60 мин — упрости)
 7. Рассчитывай объём посуды и воды на ${prefs.portions || 2} порц.
-${RECIPE_CLARITY_RULES}`;
+${RECIPE_CLARITY_RULES}${cookwareNote}`;
 
   const user = requestType === 'ingredients'
     ? `Придумай блюдо из этих продуктов (плюс базовые соль/перец/масло). Сделай профессиональный рецепт.
@@ -380,7 +384,7 @@ router.post('/user/allergies', async (req, res) => {
 router.post('/recipe/generate', async (req, res) => {
   try {
     const tgId = req.telegramUser.id;
-    const { ingredients, details } = req.body;
+    const { ingredients, details, portions, cookware } = req.body;
     if (!ingredients) return res.status(400).json({ error: 'No ingredients' });
 
     await global.pool.query(
@@ -405,8 +409,11 @@ router.post('/recipe/generate', async (req, res) => {
 
     const planType = sub?.plan_type || 'FREE';
     const userPrefs = await getUserPrefs(tgId);
+    // Порции, выбранные на экране, имеют приоритет над сохранёнными в профиле
+    if (portions) userPrefs.portions = Math.max(1, Math.min(20, parseInt(portions) || userPrefs.portions));
+    const safeCookware = String(cookware || '').trim().slice(0, 40);
     const requestType = detectRequestType(ingredients);
-    const prompt = buildPrompt(requestType, ingredients, details, planType, userPrefs);
+    const prompt = buildPrompt(requestType, ingredients, details, planType, userPrefs, safeCookware);
 
     let recipe = await callGigaChat(prompt.system, prompt.user, 2500);
     recipe = cleanHtml(recipe);

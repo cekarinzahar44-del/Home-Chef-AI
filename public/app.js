@@ -64,8 +64,8 @@ const API = {
   getStatus:       ()       => API.request('/api/recipe/status'),
   getFullProfile:  ()       => API.request('/api/user/fullprofile'),
   getPaymentInfo:  ()       => API.request('/api/payment/info'),
-  generateRecipe:  (ingredients, details) => API.request('/api/recipe/generate', {
-    method: 'POST', body: JSON.stringify({ ingredients, details })
+  generateRecipe:  (ingredients, details, portions, cookware) => API.request('/api/recipe/generate', {
+    method: 'POST', body: JSON.stringify({ ingredients, details, portions, cookware })
   }),
   generateWeekMenu: (prefs, level, portions) => API.request('/api/vip/weekmenu', {
     method: 'POST', body: JSON.stringify({ prefs, level, portions })
@@ -487,7 +487,7 @@ const WeekMenu = {
 //  НАВИГАЦИЯ МЕЖДУ ЭКРАНАМИ
 // ============================================================
 
-const state = { ingredients: '', prefs: [], planToBuy: null };
+const state = { ingredients: '', prefs: [], planToBuy: null, cookware: 'auto' };
 
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -1024,6 +1024,24 @@ document.querySelectorAll('.pref').forEach(p => {
   });
 });
 
+// Выбор посуды — одиночный (по умолчанию «Подобрать»)
+document.querySelectorAll('.cookware-chip').forEach(c => {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('.cookware-chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    state.cookware = c.dataset.pot;
+    haptic('light');
+  });
+});
+document.querySelector('.cookware-chip[data-pot="auto"]')?.classList.add('active');
+
+// Подсказка «не знаю объём» — раскрывает короткий помощник
+$('pot-help-btn')?.addEventListener('click', () => {
+  const h = $('pot-help');
+  if (h) h.hidden = !h.hidden;
+  haptic('light');
+});
+
 $('btn-send').addEventListener('click', () => {
   const val = $('dish-input').value.trim();
   if (!val) { hapticNotify('error'); toast('Введи название блюда', 'error'); return; }
@@ -1052,8 +1070,10 @@ $('btn-generate').addEventListener('click', async () => {
   const portions = $('portions').value;
   const extra = $('extra-details').value.trim();
   const prefs = state.prefs.join(', ');
+  const cookware = state.cookware && state.cookware !== 'auto' ? state.cookware : '';
   const details = [
     portions > 1 ? `${portions} порции` : '1 порция',
+    cookware ? `посуда: ${cookware}` : '',
     prefs,
     extra
   ].filter(Boolean).join('. ');
@@ -1062,7 +1082,7 @@ $('btn-generate').addEventListener('click', async () => {
   haptic('medium');
 
   try {
-    const recipe = await API.generateRecipe(state.ingredients, details);
+    const recipe = await API.generateRecipe(state.ingredients, details, portions, cookware);
     RecipeManager.load(recipe);
     showScreen('recipe');
     hapticNotify('success');
