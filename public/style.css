@@ -2969,3 +2969,42 @@ textarea::placeholder, input::placeholder { color: var(--text-muted); font-weigh
   font-size: 12.5px; line-height: 1.5; color: var(--text);
 }
 .pot-help[hidden] { display: none; }
+
+/* ============================================================
+   КУХОННЫЙ КОМФОРТ: чек-лист ингредиентов + замена продукта
+   ============================================================ */
+.cook-hint {
+  font-size: 13px; color: var(--text-2); margin: 0 0 12px;
+}
+.cook-checklist { display: flex; flex-direction: column; gap: 2px; }
+.cook-check {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 6px; border-bottom: 1px solid var(--border);
+  font-size: 15px; color: var(--text-1); cursor: pointer; transition: opacity 0.2s;
+}
+.cook-check:last-child { border-bottom: none; }
+.cook-check input {
+  width: 21px; height: 21px; accent-color: var(--accent); flex-shrink: 0; cursor: pointer;
+}
+.cook-check.done { opacity: 0.45; }
+.cook-check.done span { text-decoration: line-through; color: var(--text-muted); }
+
+.sub-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+.sub-chip {
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 7px 12px; border-radius: var(--r-pill);
+  font-family: var(--font-body); font-size: 13px; font-weight: 600;
+  color: var(--text-2); cursor: pointer; transition: all 0.2s;
+}
+.sub-chip:active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sub-text-input {
+  width: 100%; box-sizing: border-box;
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: var(--r-md); padding: 13px 15px;
+  font-family: var(--font-body); font-size: 15px; color: var(--text-1);
+}
+.sub-text-input:focus { outline: none; border-color: var(--accent); }
+.sub-result:not(:empty) {
+  margin-top: 14px; padding: 14px; border-radius: var(--r-md);
+  background: var(--accent-dim); border: 1px solid var(--border-acc);
+}

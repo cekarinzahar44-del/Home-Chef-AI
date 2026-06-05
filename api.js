@@ -48,7 +48,8 @@ const aiLimiter = createRateLimiter({
 });
 const AI_PATHS = new Set([
   '/recipe/generate', '/vip/weekmenu', '/vip/diet',
-  '/recipe/shopping-list', '/vip/weekmenu-shopping', '/stt/recognize'
+  '/recipe/shopping-list', '/vip/weekmenu-shopping', '/stt/recognize',
+  '/recipe/substitute'
 ]);
 router.use((req, res, next) => {
   if (process.env.RATE_LIMIT_ENABLED === 'false') return next();
@@ -1043,6 +1044,41 @@ router.post('/recipe/shopping-list', async (req, res) => {
   } catch (e) {
     console.error('Shopping list error:', e);
     global.recordError?.('Список покупок', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===== ЗАМЕНА ИНГРЕДИЕНТА (доступно всем, не тратит лимит рецептов) =====
+router.post('/recipe/substitute', async (req, res) => {
+  try {
+    const ingredient = String(req.body.ingredient || '').trim().slice(0, 80);
+    const dish = String(req.body.dish || '').replace(/<[^>]+>/g, '').trim().slice(0, 120);
+    if (ingredient.length < 2) return res.status(400).json({ error: 'Укажи продукт для замены' });
+
+    const tgId = req.telegramUser.id;
+    const userPrefs = await getUserPrefs(tgId);
+
+    const system = `Ты — шеф-повар. У пользователя нет одного продукта, и он спрашивает, чем его заменить в конкретном блюде.
+Дай 2–3 РЕАЛЬНЫЕ замены, которые продаются в обычном российском супермаркете.
+${allergyBlock(userPrefs.allergies)}
+Формат ответа (без вступлений и лишнего текста):
+🔄 Чем заменить: ${ingredient}
+— [замена] — [сколько брать вместо оригинала + как повлияет на вкус/текстуру, кратко]
+— [замена] — [...]
+— [замена] — [...]
+
+Правила: простые магазинные названия; конкретные пропорции; 1 строка на замену. Если адекватной замены нет — честно скажи об этом и предложи убрать продукт. Без HTML и markdown-звёздочек.`;
+
+    const user = `Блюдо: ${dish || 'домашнее блюдо'}.
+Нужно заменить продукт: ${ingredient}.
+Предложи замены, которые не испортят блюдо.`;
+
+    let answer = await callGigaChat(system, user, 600, 0.4);
+    answer = cleanHtml(answer);
+    res.json({ ingredient, answer });
+  } catch (e) {
+    console.error('Substitute error:', e);
+    global.recordError?.('Замена ингредиента', e.message);
     res.status(500).json({ error: e.message });
   }
 });
