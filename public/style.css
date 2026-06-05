@@ -1,57 +1,65 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Nunito:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* ── Постельная палитра ── */
-  --bg:          #faf7f4;   /* тёплый молочный */
-  --bg-2:        #f5f0eb;   /* чуть темнее */
-  --surface:     #ffffff;   /* карточки — чистый белый */
-  --surface-2:   #fdf9f6;   /* очень светлый кремовый */
-  --surface-3:   #f0ebe4;   /* бежевый */
+  /* ── Вариант E · Bold Grotesque — тёплый песок + терракота + эспрессо ── */
+  --bg:          #efe5d6;
+  --bg-2:        #e7dccb;
+  --surface:     #fbf6ee;
+  --surface-2:   #f5ecdd;
+  --surface-3:   #f0e6d5;
 
-  --text:        #2c2420;   /* тёплый почти-чёрный */
-  --text-2:      #6b5a52;   /* тёплый коричневатый */
-  --text-muted:  #b0998e;   /* приглушённый розово-бежевый */
+  --text:        #221a13;
+  --text-1:      #221a13;
+  --text-2:      #5f5145;
+  --text-muted:  #9c8a78;
 
-  /* Основной акцент — терракота */
-  --accent:      #c4735a;
-  --accent-light:#d98f78;
-  --accent-deep: #a85a43;
-  --accent-dim:  rgba(196,115,90, 0.1);
-  --accent-glow: rgba(196,115,90, 0.25);
+  /* Чернильный — тёмные блоки (input/profile/plan VIP) */
+  --ink:         #1b140e;
+  --ink-text:    #fbf6ee;
 
-  /* Тёплый золотисто-медовый */
-  --honey:       #d4a855;
-  --honey-light: #e8c47a;
-  --honey-dim:   rgba(212,168,85, 0.12);
-  --honey-glow:  rgba(212,168,85, 0.25);
+  /* Основной акцент — насыщенная терракота */
+  --accent:      #d24a26;
+  --accent-light:#e0623d;
+  --accent-deep: #b23a1c;
+  --accent-dim:  rgba(210,74,38, 0.1);
+  --accent-glow: rgba(210,74,38, 0.28);
 
-  /* Пудровый розовый — для VIP акцентов */
-  --rose:        #c48a8a;
-  --rose-dim:    rgba(196,138,138, 0.12);
-  --rose-glow:   rgba(196,138,138, 0.25);
+  /* Золото / латунь — VIP */
+  --honey:       #c98a2e;
+  --honey-light: #e0a542;
+  --honey-dim:   rgba(201,138,46, 0.12);
+  --honey-glow:  rgba(201,138,46, 0.25);
+  --gold:        #c98a2e;
+  --gold-dark:   #a86f1e;
 
-  --border:      rgba(44,36,32, 0.08);
-  --border-acc:  rgba(196,115,90, 0.2);
-  --border-hon:  rgba(212,168,85, 0.22);
-  --border-rose: rgba(196,138,138, 0.2);
+  /* Тёплая терракота-роза */
+  --rose:        #b06a4a;
+  --rose-dim:    rgba(176,106,74, 0.12);
+  --rose-glow:   rgba(176,106,74, 0.25);
 
-  --font-display: 'Playfair Display', Georgia, serif;
-  --font-body:    'Nunito', system-ui, sans-serif;
+  --border:      rgba(27,20,14, 0.1);
+  --border-2:    rgba(27,20,14, 0.16);
+  --border-acc:  rgba(210,74,38, 0.22);
+  --border-hon:  rgba(201,138,46, 0.24);
+  --border-rose: rgba(176,106,74, 0.2);
+
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-body:    'Hanken Grotesk', system-ui, sans-serif;
   --font-mono:    'DM Mono', monospace;
 
-  --r-sm:  8px;
+  --r-sm:  9px;
   --r-md:  14px;
-  --r-lg:  20px;
-  --r-xl:  26px;
+  --r-lg:  18px;
+  --r-xl:  22px;
   --r-pill:50px;
 
-  --shadow-sm:   0 2px 8px rgba(44,36,32,0.06);
-  --shadow-md:   0 4px 20px rgba(44,36,32,0.08);
-  --shadow-lg:   0 8px 32px rgba(44,36,32,0.1);
-  --shadow-acc:  0 4px 20px rgba(196,115,90,0.2);
-  --shadow-hon:  0 4px 18px rgba(212,168,85,0.22);
+  --shadow-sm:   0 6px 16px rgba(27,20,14,0.08);
+  --shadow-md:   0 12px 28px rgba(27,20,14,0.1);
+  --shadow-lg:   0 18px 40px rgba(27,20,14,0.14);
+  --shadow-acc:  0 12px 26px rgba(210,74,38,0.3);
+  --shadow-hon:  0 12px 26px rgba(201,138,46,0.3);
 }
 
 /* ══════════════════════════════
@@ -1387,60 +1395,68 @@ textarea::placeholder, input::placeholder { color: var(--text-muted); font-weigh
 @keyframes onbFadeOut {
   to { opacity: 0; transform: scale(0.97); }
 }
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Nunito:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* ── Постельная палитра ── */
-  --bg:          #faf7f4;   /* тёплый молочный */
-  --bg-2:        #f5f0eb;   /* чуть темнее */
-  --surface:     #ffffff;   /* карточки — чистый белый */
-  --surface-2:   #fdf9f6;   /* очень светлый кремовый */
-  --surface-3:   #f0ebe4;   /* бежевый */
+  /* ── Вариант E · Bold Grotesque — тёплый песок + терракота + эспрессо ── */
+  --bg:          #efe5d6;
+  --bg-2:        #e7dccb;
+  --surface:     #fbf6ee;
+  --surface-2:   #f5ecdd;
+  --surface-3:   #f0e6d5;
 
-  --text:        #2c2420;   /* тёплый почти-чёрный */
-  --text-2:      #6b5a52;   /* тёплый коричневатый */
-  --text-muted:  #b0998e;   /* приглушённый розово-бежевый */
+  --text:        #221a13;
+  --text-1:      #221a13;
+  --text-2:      #5f5145;
+  --text-muted:  #9c8a78;
 
-  /* Основной акцент — терракота */
-  --accent:      #c4735a;
-  --accent-light:#d98f78;
-  --accent-deep: #a85a43;
-  --accent-dim:  rgba(196,115,90, 0.1);
-  --accent-glow: rgba(196,115,90, 0.25);
+  /* Чернильный — тёмные блоки (input/profile/plan VIP) */
+  --ink:         #1b140e;
+  --ink-text:    #fbf6ee;
 
-  /* Тёплый золотисто-медовый */
-  --honey:       #d4a855;
-  --honey-light: #e8c47a;
-  --honey-dim:   rgba(212,168,85, 0.12);
-  --honey-glow:  rgba(212,168,85, 0.25);
+  /* Основной акцент — насыщенная терракота */
+  --accent:      #d24a26;
+  --accent-light:#e0623d;
+  --accent-deep: #b23a1c;
+  --accent-dim:  rgba(210,74,38, 0.1);
+  --accent-glow: rgba(210,74,38, 0.28);
 
-  /* Пудровый розовый — для VIP акцентов */
-  --rose:        #c48a8a;
-  --rose-dim:    rgba(196,138,138, 0.12);
-  --rose-glow:   rgba(196,138,138, 0.25);
+  /* Золото / латунь — VIP */
+  --honey:       #c98a2e;
+  --honey-light: #e0a542;
+  --honey-dim:   rgba(201,138,46, 0.12);
+  --honey-glow:  rgba(201,138,46, 0.25);
+  --gold:        #c98a2e;
+  --gold-dark:   #a86f1e;
 
-  --border:      rgba(44,36,32, 0.08);
-  --border-acc:  rgba(196,115,90, 0.2);
-  --border-hon:  rgba(212,168,85, 0.22);
-  --border-rose: rgba(196,138,138, 0.2);
+  /* Тёплая терракота-роза */
+  --rose:        #b06a4a;
+  --rose-dim:    rgba(176,106,74, 0.12);
+  --rose-glow:   rgba(176,106,74, 0.25);
 
-  --font-display: 'Playfair Display', Georgia, serif;
-  --font-body:    'Nunito', system-ui, sans-serif;
+  --border:      rgba(27,20,14, 0.1);
+  --border-2:    rgba(27,20,14, 0.16);
+  --border-acc:  rgba(210,74,38, 0.22);
+  --border-hon:  rgba(201,138,46, 0.24);
+  --border-rose: rgba(176,106,74, 0.2);
+
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-body:    'Hanken Grotesk', system-ui, sans-serif;
   --font-mono:    'DM Mono', monospace;
 
-  --r-sm:  8px;
+  --r-sm:  9px;
   --r-md:  14px;
-  --r-lg:  20px;
-  --r-xl:  26px;
+  --r-lg:  18px;
+  --r-xl:  22px;
   --r-pill:50px;
 
-  --shadow-sm:   0 2px 8px rgba(44,36,32,0.06);
-  --shadow-md:   0 4px 20px rgba(44,36,32,0.08);
-  --shadow-lg:   0 8px 32px rgba(44,36,32,0.1);
-  --shadow-acc:  0 4px 20px rgba(196,115,90,0.2);
-  --shadow-hon:  0 4px 18px rgba(212,168,85,0.22);
+  --shadow-sm:   0 6px 16px rgba(27,20,14,0.08);
+  --shadow-md:   0 12px 28px rgba(27,20,14,0.1);
+  --shadow-lg:   0 18px 40px rgba(27,20,14,0.14);
+  --shadow-acc:  0 12px 26px rgba(210,74,38,0.3);
+  --shadow-hon:  0 12px 26px rgba(201,138,46,0.3);
 }
 
 /* ══════════════════════════════
