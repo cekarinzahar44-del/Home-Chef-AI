@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const ExcelJS = require('exceljs');
 const { validateTelegramAuth } = require('./auth');
-const { callGigaChat } = require('./gigachat');
+const { callGigaChat, getGigaChatHealth } = require('./gigachat');
 const { transcribeVoice } = require('./stt');
 const { createRateLimiter } = require('./middleware/security');
 const router = express.Router();
@@ -472,6 +472,7 @@ router.post('/recipe/generate', async (req, res) => {
     });
   } catch (e) {
     console.error('Recipe error:', e);
+    global.recordError?.('Генерация рецепта', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -730,6 +731,7 @@ router.post('/payment/upload', upload.single('receipt'), async (req, res) => {
     res.json({ paymentId: payment.id, status: 'pending' });
   } catch (e) {
     console.error('❌ Upload error:', e);
+    global.recordError?.('Загрузка чека', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -945,6 +947,7 @@ ${avoidList.length ? `СТРОГО НЕ повторяй эти блюда (он
 
   } catch (e) {
     console.error('Week menu error:', e);
+    global.recordError?.('Меню на неделю', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -1039,6 +1042,7 @@ router.post('/recipe/shopping-list', async (req, res) => {
     res.json({ items });
   } catch (e) {
     console.error('Shopping list error:', e);
+    global.recordError?.('Список покупок', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -1196,10 +1200,81 @@ router.get('/admin/stats', adminAuth, async (req, res) => {
       WHERE s.is_active = TRUE AND s.expires_at BETWEEN NOW() AND NOW() + INTERVAL '7 days'
       ORDER BY s.expires_at ASC
     `);
-    res.json({ basic, regChart, revChart, expiring, prices: { PRO: PRO_PRICE, VIP: VIP_PRICE } });
+    // Расширенные метрики: активность, рецепты, вовлечённость, «зависшие» платежи
+    const { rows: [extra] } = await global.pool.query(`SELECT
+      (SELECT COUNT(*) FROM recipes) as recipes_total,
+      (SELECT COUNT(*) FROM recipes WHERE created_at > NOW() - INTERVAL '24 hours') as recipes_today,
+      (SELECT COUNT(*) FROM recipes WHERE created_at > NOW() - INTERVAL '7 days') as recipes_week,
+      (SELECT COUNT(DISTINCT user_id) FROM recipes WHERE created_at > NOW() - INTERVAL '24 hours') as active_today,
+      (SELECT COUNT(DISTINCT user_id) FROM recipes WHERE created_at > NOW() - INTERVAL '7 days') as active_week,
+      (SELECT COUNT(*) FROM users WHERE is_banned = TRUE) as banned_users,
+      (SELECT COUNT(*) FROM users WHERE onboarding_done = TRUE) as onboarded_users,
+      (SELECT COUNT(*) FROM users WHERE daily_reminder = TRUE AND is_banned = FALSE) as reminders_on,
+      (SELECT COUNT(DISTINCT user_id) FROM payments WHERE status='approved') as paying_users,
+      (SELECT COUNT(*) FROM payments WHERE status='rejected') as rejected_payments,
+      (SELECT ROUND(AVG(rating)::numeric, 2) FROM recipes WHERE rating IS NOT NULL) as avg_rating,
+      (SELECT COUNT(*) FROM recipes WHERE is_favorite = TRUE) as favorites_total,
+      (SELECT ROUND(EXTRACT(EPOCH FROM (NOW() - MIN(created_at)))/3600, 1) FROM payments WHERE status='pending') as oldest_pending_hours
+    `);
+    res.json({ basic, extra, regChart, revChart, expiring, prices: { PRO: PRO_PRICE, VIP: VIP_PRICE } });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+// ===== ADMIN: МОНИТОРИНГ СИСТЕМЫ =====
+// Позволяет ловить проблемы (БД, ИИ, зависшие платежи) ДО жалоб пользователей.
+router.get('/admin/health', adminAuth, async (req, res) => {
+  const health = { ts: Date.now() };
+
+  // База данных — доступность и задержка
+  const t0 = Date.now();
+  try {
+    await global.pool.query('SELECT 1');
+    health.db = { up: true, latencyMs: Date.now() - t0 };
+  } catch (e) {
+    health.db = { up: false, latencyMs: Date.now() - t0, error: e.message };
+  }
+
+  // ИИ GigaChat — статус токена и результат последнего вызова
+  try {
+    health.gigachat = getGigaChatHealth();
+  } catch (e) {
+    health.gigachat = { configured: false, error: e.message };
+  }
+
+  // Бот и интеграции
+  health.bot = { configured: !!process.env.BOT_TOKEN, adminConfigured: !!ADMIN_ID };
+  health.stt = { configured: !!process.env.YANDEX_API_KEY };
+
+  // Зависшие платежи и истекающие подписки — деньги под риском
+  try {
+    const { rows: [p] } = await global.pool.query(`SELECT
+      (SELECT COUNT(*) FROM payments WHERE status='pending') as pending_count,
+      (SELECT ROUND(EXTRACT(EPOCH FROM (NOW() - MIN(created_at)))/3600, 1) FROM payments WHERE status='pending') as oldest_pending_hours,
+      (SELECT COUNT(*) FROM subscriptions WHERE is_active=TRUE AND expires_at BETWEEN NOW() AND NOW() + INTERVAL '3 days') as expiring_soon
+    `);
+    health.payments = {
+      pending: parseInt(p.pending_count) || 0,
+      oldestPendingHours: p.oldest_pending_hours !== null ? parseFloat(p.oldest_pending_hours) : null,
+      expiringSoon: parseInt(p.expiring_soon) || 0
+    };
+  } catch (e) {
+    health.payments = { error: e.message };
+  }
+
+  // Сервер
+  const mem = process.memoryUsage();
+  health.server = {
+    uptimeSec: Math.round(process.uptime()),
+    memoryMB: Math.round(mem.rss / 1048576),
+    node: process.version,
+    env: process.env.NODE_ENV || 'development'
+  };
+
+  // Последние ошибки
+  health.errors = (global.errorLog || []).slice(0, 30);
+
+  res.json(health);
 });
 // ===== ADMIN: ПЛАТЕЖИ =====
 router.get('/admin/payments', adminAuth, async (req, res) => {
@@ -1295,7 +1370,13 @@ router.get('/admin/user/:tgId', adminAuth, async (req, res) => {
     const { rows: payments } = await global.pool.query(
       `SELECT * FROM payments WHERE user_id = $1 ORDER BY created_at DESC`, [tgId]
     );
-    res.json({ user, subscriptions: subs, payments });
+    const { rows: [{ count: recipesCount }] } = await global.pool.query(
+      `SELECT COUNT(*) FROM recipes WHERE user_id = $1`, [tgId]
+    );
+    const { rows: recentRecipes } = await global.pool.query(
+      `SELECT id, title, rating, created_at FROM recipes WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5`, [tgId]
+    );
+    res.json({ user, subscriptions: subs, payments, recipesCount: parseInt(recipesCount) || 0, recentRecipes });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

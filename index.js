@@ -46,6 +46,14 @@ function createPool() {
 }
 const pool = createPool();
 global.pool = pool;
+// ===== ЛЕНТА ПОСЛЕДНИХ ОШИБОК (для мониторинга в админке) =====
+global.errorLog = [];
+global.recordError = (context, message) => {
+  try {
+    global.errorLog.unshift({ context, message: String(message).slice(0, 300), at: Date.now() });
+    if (global.errorLog.length > 50) global.errorLog.length = 50;
+  } catch {}
+};
 // ===== EXPRESS =====
 const { securityHeaders, createRateLimiter } = require('./middleware/security');
 const app = express();

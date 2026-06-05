@@ -10,6 +10,8 @@ const TOKEN_FILE = path.join(__dirname, '.giga_token.json');
 let _token = null;
 let _expiry = 0;
 let _refreshTimer = null;
+// Состояние последнего вызова ИИ — для мониторинга в админке
+let _lastCall = { ok: null, at: null, error: null };
 
 // Загружаем токен с диска при старте
 function loadTokenFromDisk() {
@@ -153,6 +155,7 @@ async function callGigaChat(systemPrompt, userPrompt, maxTokens = 2000, temperat
 
       const content = data.choices?.[0]?.message?.content;
       if (!content) throw new Error('GigaChat вернул пустой ответ');
+      _lastCall = { ok: true, at: Date.now(), error: null };
       return content;
 
     } catch (e) {
@@ -164,11 +167,21 @@ async function callGigaChat(systemPrompt, userPrompt, maxTokens = 2000, temperat
         await new Promise(r => setTimeout(r, delay));
         continue;
       }
+      _lastCall = { ok: false, at: Date.now(), error: e.message };
       throw e;
     }
   }
   throw lastError || new Error('GigaChat недоступен');
 }
 
-module.exports = { callGigaChat };
-2
+// Состояние ИИ для мониторинга: валиден ли токен и как прошёл последний вызов
+function getGigaChatHealth() {
+  return {
+    configured: !!GIGA_CREDENTIALS,
+    tokenValid: !!_token && Date.now() < _expiry - 60_000,
+    tokenExpiresAt: _expiry || null,
+    lastCall: _lastCall
+  };
+}
+
+module.exports = { callGigaChat, getGigaChatHealth };

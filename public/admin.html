@@ -37,6 +37,7 @@
       <!-- Навигация -->
       <nav class="admin-nav">
         <button class="nav-btn active" data-tab="dashboard">📊 Дашборд</button>
+        <button class="nav-btn" data-tab="health">🩺 Система</button>
         <button class="nav-btn" data-tab="payments">💳 Платежи</button>
         <button class="nav-btn" data-tab="users">👥 Юзеры</button>
         <button class="nav-btn" data-tab="subscriptions">💎 Подписки</button>
@@ -87,7 +88,51 @@
               <div class="stat-label">За 30 дней</div>
             </div>
           </div>
+          <div class="stat-card success">
+            <div class="stat-icon">💵</div>
+            <div class="stat-info">
+              <div class="stat-number" id="stat-revenue-today">0₽</div>
+              <div class="stat-label">Выручка сегодня</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🔥</div>
+            <div class="stat-info">
+              <div class="stat-number" id="stat-active-today">0</div>
+              <div class="stat-label">Активны сегодня</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🍳</div>
+            <div class="stat-info">
+              <div class="stat-number" id="stat-recipes-today">0</div>
+              <div class="stat-label">Рецептов сегодня</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🎯</div>
+            <div class="stat-info">
+              <div class="stat-number" id="stat-conversion">0%</div>
+              <div class="stat-label">Конверсия в платных</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">💸</div>
+            <div class="stat-info">
+              <div class="stat-number" id="stat-arpu">0₽</div>
+              <div class="stat-label">ARPU (на платящего)</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">⭐</div>
+            <div class="stat-info">
+              <div class="stat-number" id="stat-avg-rating">—</div>
+              <div class="stat-label">Средний рейтинг</div>
+            </div>
+          </div>
         </div>
+
+        <div id="dashboard-updated" class="updated-line"></div>
 
         <!-- Графики -->
         <div class="charts-grid">
@@ -128,6 +173,26 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <!-- TAB: HEALTH / МОНИТОРИНГ -->
+      <section id="tab-health" class="tab-content">
+        <div class="tab-header">
+          <h2>🩺 Состояние системы</h2>
+          <label class="autorefresh-toggle">
+            <input type="checkbox" id="health-autorefresh"> Авто-обновление (30с)
+          </label>
+        </div>
+        <div id="health-status" class="status-grid"></div>
+        <div class="section-card">
+          <h3>🚨 Последние ошибки</h3>
+          <div id="health-errors" class="data-list"></div>
+        </div>
+        <div class="section-card">
+          <h3>🖥 Сервер</h3>
+          <div id="health-server" class="user-detail-grid"></div>
+        </div>
+        <div id="health-updated" class="updated-line"></div>
       </section>
 
       <!-- TAB: PAYMENTS -->

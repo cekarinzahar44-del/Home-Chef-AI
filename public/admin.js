@@ -24,6 +24,7 @@ const API = {
     return data;
   },
   getStats: () => API.request('/api/admin/stats'),
+  getHealth: () => API.request('/api/admin/health'),
   getPayments: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return API.request(`/api/admin/payments?${query}`);
@@ -114,6 +115,7 @@ function setupNavigation() {
       tg?.HapticFeedback?.impactOccurred('light');
       
       if (tab === 'dashboard') await loadDashboard();
+      else if (tab === 'health') await loadHealth();
       else if (tab === 'payments') await loadPayments();
       else if (tab === 'users') await loadUsers();
       else if (tab === 'subscriptions') await loadSubscriptions();
@@ -123,10 +125,26 @@ function setupNavigation() {
   document.getElementById('btn-refresh').addEventListener('click', async () => {
     tg?.HapticFeedback?.impactOccurred('medium');
     if (state.currentTab === 'dashboard') await loadDashboard();
+    else if (state.currentTab === 'health') await loadHealth();
     else if (state.currentTab === 'payments') await loadPayments();
     else if (state.currentTab === 'users') await loadUsers();
     toast('✅ Обновлено');
   });
+
+  // Авто-обновление мониторинга
+  const arToggle = document.getElementById('health-autorefresh');
+  if (arToggle) {
+    arToggle.addEventListener('change', () => {
+      if (arToggle.checked) {
+        state.healthTimer = setInterval(() => {
+          if (state.currentTab === 'health') loadHealth();
+        }, 30000);
+      } else {
+        clearInterval(state.healthTimer);
+        state.healthTimer = null;
+      }
+    });
+  }
 }
 
 // ===== DASHBOARD =====
@@ -134,15 +152,39 @@ async function loadDashboard() {
   try {
     const stats = await API.getStats();
     const b = stats.basic;
-    
-    document.getElementById('stat-total-users').textContent = b.total_users;
-    document.getElementById('stat-users-today').textContent = b.users_today;
-    document.getElementById('stat-active-subs').textContent = b.active_subs;
-    document.getElementById('stat-pending').textContent = b.pending_payments;
-    document.getElementById('stat-revenue-total').textContent = `${b.total_revenue || 0}₽`;
-    document.getElementById('stat-revenue-month').textContent = `${b.revenue_month || 0}₽`;
-    document.getElementById('stat-pro-count').textContent = b.pro_subs || 0;
-    document.getElementById('stat-vip-count').textContent = b.vip_subs || 0;
+    const ex = stats.extra || {};
+
+    const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+    setText('stat-total-users', b.total_users);
+    setText('stat-users-today', b.users_today);
+    setText('stat-active-subs', b.active_subs);
+    setText('stat-pending', b.pending_payments);
+    setText('stat-revenue-total', `${b.total_revenue || 0}₽`);
+    setText('stat-revenue-month', `${b.revenue_month || 0}₽`);
+    setText('stat-revenue-today', `${b.revenue_today || 0}₽`);
+    setText('stat-pro-count', b.pro_subs || 0);
+    setText('stat-vip-count', b.vip_subs || 0);
+
+    // Расширенные метрики
+    setText('stat-active-today', ex.active_today || 0);
+    setText('stat-recipes-today', ex.recipes_today || 0);
+    setText('stat-avg-rating', ex.avg_rating ? `${ex.avg_rating}★` : '—');
+
+    // Конверсия в платных и ARPU
+    const totalUsers = parseInt(b.total_users) || 0;
+    const payingUsers = parseInt(ex.paying_users) || 0;
+    const conversion = totalUsers > 0 ? ((b.active_subs / totalUsers) * 100).toFixed(1) : 0;
+    const arpu = payingUsers > 0 ? Math.round((b.total_revenue || 0) / payingUsers) : 0;
+    setText('stat-conversion', `${conversion}%`);
+    setText('stat-arpu', `${arpu}₽`);
+
+    // Подсветка карточки «ожидают одобрения» если есть зависшие
+    const pendingCard = document.getElementById('stat-pending')?.closest('.stat-card');
+    if (pendingCard) pendingCard.classList.toggle('alert', (b.pending_payments || 0) > 0);
+
+    const upd = document.getElementById('dashboard-updated');
+    if (upd) upd.textContent = `Обновлено в ${new Date().toLocaleTimeString('ru-RU')}`;
     
     // График регистраций
     renderLineChart('chart-registrations', stats.regChart, 'Регистрации', '#667eea');    
@@ -254,6 +296,117 @@ function renderExpiringList(items) {
       <button class="btn-sm btn-primary" onclick="viewUser(${s.tg_id})">👁 Профиль</button>
     </div>
   `).join('');
+}
+
+// ===== HEALTH / МОНИТОРИНГ =====
+async function loadHealth() {
+  const grid = document.getElementById('health-status');
+  grid.innerHTML = '<div class="empty-state"><p>Проверка...</p></div>';
+  try {
+    const h = await API.getHealth();
+    const cards = [];
+
+    // База данных
+    cards.push(healthCard('🗄', 'База данных', h.db?.up ? 'ok' : 'bad',
+      h.db?.up ? `Отклик ${h.db.latencyMs} мс` : (h.db?.error || 'недоступна')));
+
+    // ИИ GigaChat
+    const g = h.gigachat || {};
+    let gState = 'ok', gDetail = 'токен активен';
+    if (!g.configured) { gState = 'bad'; gDetail = 'не настроен (нет GIGACHAT_CREDENTIALS)'; }
+    else if (g.lastCall && g.lastCall.ok === false) { gState = 'warn'; gDetail = `ошибка вызова: ${g.lastCall.error || ''}`; }
+    else if (g.lastCall && g.lastCall.ok === true) { gDetail = `последний вызов успешен ${timeAgo(g.lastCall.at)}`; }
+    else if (!g.tokenValid) { gDetail = 'токен обновится при первом запросе'; }
+    cards.push(healthCard('🤖', 'ИИ GigaChat', gState, gDetail));
+
+    // Бот
+    cards.push(healthCard('💬', 'Telegram-бот', h.bot?.configured ? 'ok' : 'bad',
+      h.bot?.configured ? (h.bot.adminConfigured ? 'настроен' : 'без ADMIN_ID') : 'не настроен'));
+
+    // Платежи в ожидании
+    const p = h.payments || {};
+    const pendState = (p.pending || 0) === 0 ? 'ok' : ((p.oldestPendingHours || 0) > 12 ? 'bad' : 'warn');
+    const pendDetail = (p.pending || 0) === 0 ? 'нет ожидающих'
+      : `${p.pending} ждут · самый старый ${p.oldestPendingHours} ч`;
+    cards.push(healthCard('⏳', 'Платежи в ожидании', pendState, pendDetail));
+
+    // Истекающие подписки
+    cards.push(healthCard('⏰', 'Истекают за 3 дня', (p.expiringSoon || 0) > 0 ? 'warn' : 'ok',
+      (p.expiringSoon || 0) > 0 ? `${p.expiringSoon} подписок` : 'нет'));
+
+    // STT
+    cards.push(healthCard('🎙', 'Голосовой ввод', h.stt?.configured ? 'ok' : 'warn',
+      h.stt?.configured ? 'настроен' : 'тестовый режим (нет ключа)'));
+
+    grid.innerHTML = cards.join('');
+
+    renderHealthErrors(h.errors);
+
+    const s = h.server || {};
+    document.getElementById('health-server').innerHTML =
+      serverItem('Аптайм', formatUptime(s.uptimeSec)) +
+      serverItem('Память (RSS)', `${s.memoryMB} МБ`) +
+      serverItem('Node.js', s.node || '—') +
+      serverItem('Окружение', s.env || '—');
+
+    const upd = document.getElementById('health-updated');
+    if (upd) upd.textContent = `Обновлено в ${new Date().toLocaleTimeString('ru-RU')}`;
+  } catch (e) {
+    grid.innerHTML = `<div class="empty-state">❌ ${e.message}</div>`;
+  }
+}
+
+function healthCard(icon, title, state, detail) {
+  const label = { ok: 'OK', warn: 'Внимание', bad: 'Проблема' }[state] || '';
+  return `
+    <div class="status-card ${state}">
+      <div class="status-top">
+        <span class="status-icon">${icon}</span>
+        <span class="status-dot ${state}"></span>
+      </div>
+      <div class="status-title">${title}</div>
+      <div class="status-badge ${state}">${label}</div>
+      <div class="status-detail">${escapeHtml(detail)}</div>
+    </div>`;
+}
+
+function serverItem(label, value) {
+  return `<div class="user-detail-item"><div class="user-detail-label">${label}</div><div class="user-detail-value">${escapeHtml(String(value))}</div></div>`;
+}
+
+function renderHealthErrors(errors) {
+  const list = document.getElementById('health-errors');
+  if (!errors || errors.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-state-emoji">✅</div><p>Ошибок нет</p></div>';
+    return;
+  }
+  list.innerHTML = errors.map(e => `
+    <div class="data-item">
+      <div class="data-item-info">
+        <div class="data-item-title">⚠️ ${escapeHtml(e.context || 'Ошибка')}</div>
+        <div class="data-item-sub">${escapeHtml(e.message || '')}</div>
+      </div>
+      <div class="error-time">${timeAgo(e.at)}</div>
+    </div>`).join('');
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+function timeAgo(ts) {
+  if (!ts) return '—';
+  const sec = Math.round((Date.now() - ts) / 1000);
+  if (sec < 60) return `${sec} с назад`;
+  const m = Math.round(sec / 60);
+  if (m < 60) return `${m} мин назад`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} ч назад`;
+  return `${Math.round(h / 24)} д назад`;
+}
+function formatUptime(sec) {
+  if (!sec) return '—';
+  const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+  return [d ? `${d}д` : '', h ? `${h}ч` : '', `${m}м`].filter(Boolean).join(' ');
 }
 
 // ===== PAYMENTS =====
@@ -520,12 +673,17 @@ window.viewUser = async (tgId) => {
     const data = await API.getUser(tgId);
     const u = data.user;
     document.getElementById('modal-user-name').textContent = u.first_name || 'User';
-    
+
+    const modeNames = { standard: 'Обычный', family: '👨‍👩‍👧 Семья', fitness: '💪 Фитнес' };
+    const lastAct = u.last_recipe_at ? timeAgo(new Date(u.last_recipe_at).getTime()) : '—';
+    const statusText2 = u.is_banned ? '🚫 Забанен' : '✅ Активен';
+
     content.innerHTML = `
+      ${u.is_banned ? '<div class="modal-alert">🚫 Пользователь забанен</div>' : ''}
       <div class="user-detail-grid">
         <div class="user-detail-item">
           <div class="user-detail-label">Username</div>
-          <div class="user-detail-value">@${u.username || '—'}</div>
+          <div class="user-detail-value">@${escapeHtml(u.username || '—')}</div>
         </div>
         <div class="user-detail-item">
           <div class="user-detail-label">TG ID</div>
@@ -536,10 +694,39 @@ window.viewUser = async (tgId) => {
           <div class="user-detail-value">${new Date(u.created_at).toLocaleDateString('ru-RU')}</div>
         </div>
         <div class="user-detail-item">
-          <div class="user-detail-label">Рецептов создано</div>
-          <div class="user-detail-value">${u.free_recipes_used || 0}</div>        </div>
+          <div class="user-detail-label">Последняя активность</div>
+          <div class="user-detail-value">${lastAct}</div>
+        </div>
+        <div class="user-detail-item">
+          <div class="user-detail-label">Рецептов всего</div>
+          <div class="user-detail-value">${data.recipesCount || 0}</div>
+        </div>
+        <div class="user-detail-item">
+          <div class="user-detail-label">Бесплатных использовано</div>
+          <div class="user-detail-value">${u.free_recipes_used || 0} / 3</div>
+        </div>
+        <div class="user-detail-item">
+          <div class="user-detail-label">Режим</div>
+          <div class="user-detail-value">${modeNames[u.mode] || u.mode || 'Обычный'}</div>
+        </div>
+        <div class="user-detail-item">
+          <div class="user-detail-label">Напоминания</div>
+          <div class="user-detail-value">${u.daily_reminder === false ? '🔕 Выкл' : '🔔 Вкл'}</div>
+        </div>
+        <div class="user-detail-item">
+          <div class="user-detail-label">Онбординг</div>
+          <div class="user-detail-value">${u.onboarding_done ? '✅ Пройден' : '⏳ Нет'}</div>
+        </div>
+        <div class="user-detail-item">
+          <div class="user-detail-label">Статус</div>
+          <div class="user-detail-value">${statusText2}</div>
+        </div>
+        <div class="user-detail-item" style="grid-column:1/-1;">
+          <div class="user-detail-label">🚫 Аллергии</div>
+          <div class="user-detail-value">${u.allergies ? escapeHtml(u.allergies) : '— не указаны'}</div>
+        </div>
       </div>
-      
+
       <div class="section-title">💎 Активная подписка</div>
       ${data.subscriptions && data.subscriptions.length > 0 && data.subscriptions[0].is_active ? `
         <div class="user-detail-grid">
@@ -566,6 +753,22 @@ window.viewUser = async (tgId) => {
         <button class="btn-sm btn-ghost" onclick="openInTelegram(${u.tg_id})">💬 Написать</button>
       </div>
       
+      ${data.recentRecipes && data.recentRecipes.length > 0 ? `
+        <div class="section-title">🍳 Последние рецепты</div>
+        <div class="data-list">
+          ${data.recentRecipes.map(r => `
+            <div class="data-item">
+              <div class="data-item-info">
+                <div class="data-item-title">${escapeHtml(r.title || 'Рецепт')}</div>
+                <div class="data-item-sub">
+                  ${r.rating ? `${r.rating}★ · ` : ''}${new Date(r.created_at).toLocaleDateString('ru-RU')}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
       ${data.payments && data.payments.length > 0 ? `
         <div class="section-title">💳 История платежей (${data.payments.length})</div>
         <div class="data-list">
