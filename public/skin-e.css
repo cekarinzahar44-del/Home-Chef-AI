@@ -1,0 +1,185 @@
+/* ============================================================
+   VARIANT E · SKIN — дожимаем компоненты до облика Bold Grotesque.
+   Грузится после style.css, поэтому переопределяет его.
+   ============================================================ */
+
+/* Дисплейные заголовки — без курсива, плотный Bricolage */
+.app-header h1,
+.p-name,
+.recipe-title,
+.cooking-title,
+.screen-title,
+.plan-top h3,
+.wm-day-title,
+.vip-card h3 {
+  font-style: normal !important;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.6px;
+}
+
+/* ---------- HEADER ---------- */
+.app-header { padding: calc(env(safe-area-inset-top) + 14px) 20px 2px; }
+.header-brand { gap: 10px; }
+.brand-dot {
+  width: 30px; height: 30px; border-radius: 10px;
+  background: var(--accent); box-shadow: 0 5px 12px var(--accent-glow);
+}
+.app-header h1 { font-size: 21px; color: var(--text); }
+.badge {
+  background: var(--ink); color: var(--ink-text);
+  border: none; letter-spacing: 0.5px;
+  padding: 6px 12px; font-size: 11px;
+}
+.badge.PRO, .badge.pro { background: var(--ink); color: var(--ink-text); }
+.badge.VIP, .badge-vip {
+  background: linear-gradient(135deg, var(--honey-light), var(--honey)) !important;
+  color: #2a1d08 !important;
+}
+.avatar-btn {
+  width: 42px; height: 42px; border-radius: 14px;
+  background: var(--surface); border: 1.5px solid var(--border);
+  color: var(--text-2);
+}
+
+/* ---------- HERO ---------- */
+.hero { text-align: left; padding: 16px 20px 6px; }
+.hero-plate { display: none; }
+.hero h2 {
+  font-size: 46px; font-weight: 800; letter-spacing: -2px;
+  line-height: 1.0; margin-bottom: 12px;
+}
+.hero .hint, .hero p.hint {
+  text-align: left; color: var(--text-2);
+  font-weight: 500; max-width: 280px; font-size: 14px;
+}
+.hero .hl, .hl {
+  background: var(--accent); color: #fff;
+  padding: 0 9px 2px; border-radius: 11px;
+  display: inline-block; transform: rotate(-1.6deg); line-height: 1.1;
+}
+
+/* ---------- INPUT CARD (тёплый кремовый, тактильный) ---------- */
+.input-card {
+  margin: 16px 16px 18px; border-radius: var(--r-xl);
+  border: 1.5px solid var(--border); box-shadow: var(--shadow-md);
+}
+
+/* ---------- BUTTONS — плоский акцент ---------- */
+.primary-btn {
+  background: var(--accent) !important;
+  border-radius: 15px; letter-spacing: 0.3px; font-size: 15px;
+  box-shadow: var(--shadow-acc);
+}
+.primary-btn::before { display: none; }
+.gold-btn {
+  background: linear-gradient(135deg, var(--honey-light), var(--honey)) !important;
+  color: #2a1d08 !important;
+}
+.mic-btn {
+  width: 50px; height: 50px; border-radius: 15px;
+  background: var(--surface-3); border: 1.5px solid var(--border);
+  color: var(--accent);
+}
+.back-btn {
+  background: var(--surface); border: 1.5px solid var(--border);
+  color: var(--text); font-weight: 700; padding: 10px 16px;
+}
+.icon-btn { border-radius: 14px; border: 1.5px solid var(--border); color: var(--accent); }
+
+/* ---------- SECTION LABEL ---------- */
+.section-label { font-family: var(--font-mono); font-weight: 500; letter-spacing: 1.5px; }
+
+/* ---------- CHIPS — тактильные скруглённые ---------- */
+.chip {
+  border-radius: 14px; padding: 11px 16px;
+  font-weight: 700; font-size: 14px; border: 1.5px solid var(--border);
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.chip:active, .chip.selected {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.chip.selected svg, .chip:active svg { color: #fff; }
+.pref { border-radius: 14px; padding: 11px 16px; font-weight: 700; font-size: 14px; border: 1.5px solid var(--border); }
+.pref:active, .pref.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ---------- STATUS PILL ---------- */
+.status-pill-wrap { text-align: left; padding: 16px 20px 0; }
+.status-pill {
+  background: var(--accent-dim); border: none;
+  color: var(--accent-deep); font-weight: 700; padding: 9px 15px;
+}
+
+/* ---------- PROFILE NAV BTN ---------- */
+.profile-nav-btn {
+  margin: 14px 16px 0; width: calc(100% - 32px);
+  border: 1.5px solid var(--border); border-radius: var(--r-lg);
+  background: var(--surface); padding: 15px 17px;
+}
+.profile-nav-icon {
+  width: 38px; height: 38px; border-radius: 12px;
+  background: var(--accent-dim); display: inline-flex;
+  align-items: center; justify-content: center;
+}
+
+/* ---------- RECIPE ---------- */
+.recipe-title { font-size: 30px; }
+.progress-fill { background: var(--accent); }
+.step-card { border: 1.5px solid var(--border); border-radius: var(--r-xl); box-shadow: var(--shadow-sm); }
+.nav-btn { border-radius: 16px; border: 1.5px solid var(--border-2); font-weight: 800; }
+.nav-btn.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+.timer-bar {
+  background: var(--ink); color: var(--ink-text);
+  border-radius: var(--r-lg); border: none;
+}
+.timer-bar .timer-label { color: rgba(251,246,238,0.82); }
+.timer-btn { background: var(--accent); color: #fff; border: none; border-radius: 50px; font-weight: 800; }
+.extra-btn { border: 1.5px solid var(--border); border-radius: var(--r-lg); }
+.extra-btn-primary { border-color: var(--border-acc); }
+
+/* ---------- SUBSCRIPTION — VIP тёмный ---------- */
+.plan-vip {
+  background: var(--ink) !important;
+  border-color: var(--ink) !important;
+  color: var(--ink-text);
+}
+.plan-vip h3, .plan-vip .plan-list li { color: var(--ink-text); }
+.plan-vip .plan-list li { opacity: 0.92; }
+.plan-vip .gold-price { color: var(--honey-light) !important; }
+.plan-vip-badge {
+  background: linear-gradient(135deg, var(--honey-light), var(--honey));
+  color: #2a1d08;
+}
+.plan-card { border-radius: var(--r-xl); }
+.plan-icon { border-radius: 14px; }
+
+/* ---------- PROFILE — герой тёмный ---------- */
+.profile-hero-card {
+  background: var(--ink) !important;
+  color: var(--ink-text); border: none;
+  border-radius: var(--r-xl); overflow: hidden; position: relative;
+}
+.profile-hero-card .p-name { color: var(--ink-text); }
+.profile-hero-card .p-user { color: rgba(251,246,238,0.55); }
+.p-avatar {
+  border-radius: 22px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  box-shadow: 0 12px 26px var(--accent-glow);
+}
+.stat-box { border: 1.5px solid var(--border); border-radius: var(--r-lg); }
+.stat-val { font-family: var(--font-display); font-weight: 800; color: var(--accent); }
+.menu-item { border: 1.5px solid var(--border); border-radius: 14px; }
+
+/* ---------- ONBOARDING ---------- */
+.onb-content { text-align: left; }
+.onb-title { font-style: normal; font-family: var(--font-display); font-weight: 800; letter-spacing: -1.4px; }
+.onb-next-btn { background: var(--accent); border-radius: 15px; }
+.onb-day-pill.active, .onb-day-pill.on { background: var(--accent); color: #fff; }
+
+/* ---------- WEEK MENU ---------- */
+.wm-day-title { font-size: 24px; }
+.wm-progress-fill, .wm-progress-bar { background: var(--accent); }
+.vip-card { border: 1.5px solid var(--border); border-radius: var(--r-xl); }
+
+/* ---------- MODALS ---------- */
+.modal-box { border-radius: var(--r-xl); }
