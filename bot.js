@@ -1,3 +1,7 @@
+// Отображаемые названия тарифов (внутренние коды PRO/VIP не меняем)
+const PLAN_NAMES = { FREE: 'Бесплатно', PRO: 'Стандарт', VIP: 'Про' };
+const planName = (code) => PLAN_NAMES[code] || code;
+
 module.exports = (bot, pool, ADMIN_ID) => {
   console.log('✅ Bot callbacks loaded');
 
@@ -20,10 +24,10 @@ module.exports = (bot, pool, ADMIN_ID) => {
       await pool.query(`UPDATE payments SET status='approved' WHERE id=$1`, [payment.id]);
 
       await ctx.answerCbQuery('✅ Одобрено');
-      await ctx.editMessageCaption(`✅ #${payment.id} | ${payment.plan_type} активирован`, { parse_mode: 'HTML' });
+      await ctx.editMessageCaption(`✅ #${payment.id} | ${planName(payment.plan_type)} активирован`, { parse_mode: 'HTML' });
       await ctx.telegram.sendMessage(
         payment.user_id,
-        `🎉 <b>${payment.plan_type} активирована!</b>\n📅 До: ${expiresAt.toLocaleDateString('ru-RU')}`,
+        `🎉 <b>Подписка «${planName(payment.plan_type)}» активирована!</b>\n📅 До: ${expiresAt.toLocaleDateString('ru-RU')}`,
         { parse_mode: 'HTML' }
       );
     } catch (e) {

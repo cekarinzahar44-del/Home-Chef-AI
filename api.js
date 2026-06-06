@@ -10,8 +10,11 @@ const { createRateLimiter } = require('./middleware/security');
 const router = express.Router();
 // ===== КОНСТАНТЫ =====
 const FREE_LIMIT = 3;
-const PRO_PRICE = 500;
-const VIP_PRICE = 800;
+const PRO_PRICE = parseInt(process.env.PRO_PRICE) || 290;   // тариф «Стандарт»
+const VIP_PRICE = parseInt(process.env.VIP_PRICE) || 490;   // тариф «Про»
+// Отображаемые названия тарифов (внутренние коды PRO/VIP не меняем — это безопасно для БД)
+const PLAN_NAMES = { FREE: 'Бесплатно', PRO: 'Стандарт', VIP: 'Про' };
+const planName = (code) => PLAN_NAMES[code] || code;
 const SBP_PHONE = process.env.SBP_PHONE || '+79022231321';
 const SBP_RECIPIENT = process.env.SBP_RECIPIENT || 'Ермачкова Алина В.';
 const ADMIN_ID = parseInt(process.env.ADMIN_ID) || 0;
@@ -210,6 +213,34 @@ function detectRequestType(text) {
   return 'dish';
 }
 
+// Запрос про напиток? (напитки доступны только в тарифе «Про»)
+function detectDrink(text) {
+  const t = (text || '').toLowerCase();
+  // Многословные/длинные — простое вхождение
+  const phrases = ['напиток', 'напитк', 'смузи', 'коктейль', 'коктейл', 'молочный коктейль',
+    'лимонад', 'компот', 'морс', 'глинтвейн', 'пунш', 'мохито', 'капучино', 'латте',
+    'раф ', 'милкшейк', 'милк-шейк', 'кисель', 'какао', 'горячий шоколад'];
+  if (phrases.some(p => t.includes(p))) return true;
+  // Короткие слова — по границам, чтобы не ловить «сочный», «чайная ложка»
+  if (/(^|[^а-яё])(чай|кофе|сок|квас|фреш|тоник|эспрессо)([^а-яё]|$)/i.test(t)) return true;
+  return false;
+}
+
+// Грубая проверка «явно не про еду» — быстрый отказ без вызова ИИ
+function looksNonFood(text) {
+  const t = (text || '').toLowerCase();
+  const nonFood = ['погод', 'прогноз', 'новост', 'курс валют', 'доллар', 'евро', 'биткоин',
+    'политик', 'президент', 'гороскоп', 'анекдот', 'реферат',
+    'сочинени', 'перевод', 'переведи', 'программ', 'код на', 'python', 'javascript',
+    'математ', 'уравнени', 'столиц', 'население', 'википеди', 'кто так', 'что такое жизнь',
+    'смысл жизни', 'знакомств', 'девушк', 'парень для', 'кредит', 'ипотек', 'лекарств от'];
+  if (!nonFood.some(k => t.includes(k))) return false;
+  // Если в тексте всё же есть явные кулинарные слова — не блокируем
+  const foodHints = ['рецепт', 'приготов', 'блюд', 'суп', 'салат', 'соус', 'десерт', 'торт',
+    'выпечк', 'запекан', 'пожар', 'свар', 'ингредиент', 'поужина', 'позавтрак', 'обед'];
+  return !foodHints.some(k => t.includes(k));
+}
+
 function buildPrompt(requestType, ingredients, details, planType, prefs = {}, cookware = '') {
   const isVIP = planType === 'VIP';
   const isPRO = planType === 'PRO' || isVIP;
@@ -221,6 +252,9 @@ function buildPrompt(requestType, ingredients, details, planType, prefs = {}, co
     : '';
 
   const system = `${allergyBlock(allergies)}Ты — шеф-повар и наставник. Пиши рецепт так, чтобы по нему даже новичок приготовил блюдо идеально с первого раза: каждый шаг понятен, ничего не нужно додумывать.
+
+‼️ СНАЧАЛА ПРОВЕРЬ ТЕМУ. Если запрос НЕ про приготовление еды, блюд, напитков или продуктов (например: погода, новости, политика, перевод, программирование, математика, личные вопросы и т.п.) — НЕ выдумывай рецепт. Ответь РОВНО одной строкой и больше ничем: NOT_FOOD
+Рецепт по формату ниже выдавай ТОЛЬКО если запрос действительно про еду.
 ${FOOD_ONLY_GUARD}${modeText}
 
 ФОРМАТ ОТВЕТА (соблюдай ТОЧНО, ни один блок не пропускай):
@@ -259,7 +293,7 @@ ${FOOD_ONLY_GUARD}${modeText}
 — Только продукты из обычного супермаркета. Без HTML и markdown-звёздочек **.
 ${RECIPE_CLARITY_RULES}${cookwareNote}`;
 
-  const reminder = `\n\nПЕРЕД ОТВЕТОМ ПРОВЕРЬ: указаны размер посуды и объём воды; каждый ингредиент доведён до конца (что достать/нарезать/вернуть); названия продуктов простые магазинные; минимум 6 шагов со временем и критерием готовности. Пиши строго по формату.`;
+  const reminder = `\n\nЕсли запрос выше НЕ про еду — ответь только: NOT_FOOD\nИначе ПЕРЕД ОТВЕТОМ ПРОВЕРЬ: указаны размер посуды и объём воды; каждый ингредиент доведён до конца (что достать/нарезать/вернуть); названия продуктов простые магазинные; минимум 6 шагов со временем и критерием готовности. Пиши строго по формату.`;
 
   const user = (requestType === 'ingredients'
     ? `Придумай блюдо из этих продуктов (плюс базовые соль/перец/масло). Сделай профессиональный рецепт.
@@ -393,6 +427,20 @@ router.post('/recipe/generate', async (req, res) => {
       [tgId]
     );
     const { rows: [user] } = await global.pool.query(`SELECT * FROM users WHERE tg_id=$1`, [tgId]);
+    const planType = sub?.plan_type || 'FREE';
+
+    // ТЕМА: принимаем только запросы про еду (быстрый отказ без вызова ИИ)
+    if (looksNonFood(ingredients)) {
+      return res.status(422).json({ error: 'not_food', message: 'Я помогаю только с рецептами, переформулируйте запрос' });
+    }
+    // НАПИТКИ доступны только в тарифе «Про» (внутренний код VIP)
+    if (detectDrink(ingredients) && planType !== 'VIP') {
+      return res.status(403).json({
+        error: 'drinks_pro_only',
+        message: 'Рецепты напитков доступны в тарифе «Про». Оформите его, чтобы готовить напитки 🍹',
+        prices: { PRO: PRO_PRICE, VIP: VIP_PRICE }
+      });
+    }
 
     if (!sub && user.free_recipes_used >= FREE_LIMIT) {
       return res.status(403).json({
@@ -402,7 +450,6 @@ router.post('/recipe/generate', async (req, res) => {
       });
     }
 
-    const planType = sub?.plan_type || 'FREE';
     const userPrefs = await getUserPrefs(tgId);
     // Порции, выбранные на экране, имеют приоритет над сохранёнными в профиле
     if (portions) userPrefs.portions = Math.max(1, Math.min(20, parseInt(portions) || userPrefs.portions));
@@ -412,6 +459,12 @@ router.post('/recipe/generate', async (req, res) => {
 
     let recipe = await callGigaChat(prompt.system, prompt.user, 2500, 0.6);
     recipe = cleanHtml(recipe);
+
+    // ИИ распознал, что запрос не про еду — возвращаем вежливый отказ
+    const trimmedRecipe = recipe.trim();
+    if (/^NOT_FOOD/i.test(trimmedRecipe) || (trimmedRecipe.includes('NOT_FOOD') && trimmedRecipe.length < 120)) {
+      return res.status(422).json({ error: 'not_food', message: 'Я помогаю только с рецептами, переформулируйте запрос' });
+    }
 
     // ПОСТ-ПРОВЕРКА АЛЛЕРГЕНОВ — если AI всё же вставил аллерген, перегенерируем
     if (userPrefs.allergies) {
@@ -751,9 +804,9 @@ router.post('/payment/upload', upload.single('receipt'), async (req, res) => {
         `   • TG ID: <code>${tgId}</code>\n` +
         `   • Регистрация: ${user?.created_at ? new Date(user.created_at).toLocaleDateString('ru-RU') : '—'}\n\n` +
         `💳 <b>Оплата:</b>\n` +
-        `   • Тариф: <b>${planType}</b>\n` +
+        `   • Тариф: <b>${planName(planType)}</b>\n` +
         `   • Сумма: <b>${amount}₽</b>\n` +
-        `   • Статус юзера: ${isNewUser ? '🆕 Новый' : `📅 ${currentSub.plan_type} до ${new Date(currentSub.expires_at).toLocaleDateString('ru-RU')}`}\n\n` +
+        `   • Статус юзера: ${isNewUser ? '🆕 Новый' : `📅 ${planName(currentSub.plan_type)} до ${new Date(currentSub.expires_at).toLocaleDateString('ru-RU')}`}\n\n` +
         `📊 Рецептов создано: ${user?.free_recipes_used || 0}`;
       const keyboard = {
         inline_keyboard: [
@@ -1283,7 +1336,12 @@ router.post('/vip/diet', async (req, res) => {
 
     const { allergies } = await getUserPrefs(tgId);
 
-    const system = `Ты дипломированный диетолог-нутрициолог с 15-летним опытом. Опираешься на доказательную медицину (ВОЗ, AND, EFSA), не на модные диеты.
+    const system = `Ты — консультант по здоровому питанию (нутрициолог). Даёшь ОБЩИЕ рекомендации и советы по питанию на основе доказательной базы (ВОЗ, EFSA), без модных диет.
+
+⚕️ ГРАНИЦА КОМПЕТЕНЦИИ (СТРОГО): Ты НЕ врач. Тебе ЗАПРЕЩЕНО ставить диагнозы, назначать лечение, лечебные диеты при заболеваниях, дозировки лекарств и трактовать анализы или симптомы.
+Если пользователь просит вылечить болезнь, поставить диагноз, назначить лечебную диету или лекарства — НЕ делай этого. Ответь дословно с этой мысли:
+«Я не врач и не могу ставить диагнозы или назначать лечение — с этим обязательно обратитесь к врачу или клиническому диетологу 🩺»
+После этого можешь дать только общий безопасный совет по здоровому питанию (без привязки к лечению).
 ${FOOD_ONLY_GUARD}${allergyBlock(allergies)}
 
 ФОРМАТ ОТВЕТА:
@@ -1315,10 +1373,10 @@ ${FOOD_ONLY_GUARD}${allergyBlock(allergies)}
 1. Конкретные цифры везде где можно (граммы, ккал, мг, %)
 2. Развенчивай мифы — это уровень профи
 3. Не используй "детокс", "очищение", "шлаки" — псевдонаука
-4. При вопросах о болезнях напомни про консультацию врача
+4. Болезни/диагнозы/лечение/лекарства — НЕ твоя зона: сообщи, что ты не врач, и направь к специалисту
 5. Без HTML и markdown звёздочек
-6. Если вопрос не про еду — мягко верни в тему`;
-    const answer = await callGigaChat(system, question, 1500);
+6. Если вопрос не про еду/питание — мягко верни в тему`;
+    const answer = await callGigaChat(system, question, 1500, 0.5);
     res.json({ answer: cleanHtml(answer) });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1552,7 +1610,7 @@ router.post('/admin/user/:tgId/plan', adminAuth, async (req, res) => {
       const notifyBot = new Telegraf(process.env.BOT_TOKEN);
       await notifyBot.telegram.sendMessage(
         parseInt(tgId),
-        `🎉 <b>Администратор выдал вам ${planType}!</b>\n📅 До: ${expiresAt.toLocaleDateString('ru-RU')}`,
+        `🎉 <b>Администратор выдал вам тариф «${planName(planType)}»!</b>\n📅 До: ${expiresAt.toLocaleDateString('ru-RU')}`,
         { parse_mode: 'HTML' }
       );
     } catch (e) {
@@ -1613,7 +1671,7 @@ router.post('/admin/payment/:id/approve', adminAuth, async (req, res) => {  try 
       const notifyBot = new Telegraf(process.env.BOT_TOKEN);
       await notifyBot.telegram.sendMessage(
         payment.user_id,
-        `🎉 <b>${payment.plan_type} активирована!</b>\n📅 До: ${expiresAt.toLocaleDateString('ru-RU')}`,
+        `🎉 <b>Подписка «${planName(payment.plan_type)}» активирована!</b>\n📅 До: ${expiresAt.toLocaleDateString('ru-RU')}`,
         { parse_mode: 'HTML' }
       );
     } catch (e) {

@@ -442,19 +442,19 @@
         <div class="plan-top">
           <div>
             <div class="plan-icon">&#x1F4B3;</div>
-            <h3>PRO</h3>
+            <h3>Стандарт</h3>
           </div>
-          <div class="plan-price">500&#x20BD;<span>/мес</span></div>
+          <div class="plan-price">290&#x20BD;<span>/мес</span></div>
         </div>
         <ul class="plan-list">
-          <li>Безлимит рецептов</li>
+          <li>Безлимит рецептов блюд</li>
           <li>Голосовое управление</li>
           <li>Приоритетная генерация</li>
           <li class="new-feat">&#x1F6D2; Список покупок</li>
           <li class="new-feat">&#x1F4D6; История рецептов</li>
           <li class="new-feat">&#x23F1; Таймер в рецепте</li>
         </ul>
-        <button class="primary-btn full-btn" onclick="buyPlan('PRO')">Выбрать PRO</button>
+        <button class="primary-btn full-btn" onclick="buyPlan('PRO')">Выбрать Стандарт</button>
       </div>
 
       <div class="plan-card plan-vip">
@@ -462,23 +462,19 @@
         <div class="plan-top">
           <div>
             <div class="plan-icon">&#x1F451;</div>
-            <h3>VIP</h3>
+            <h3>Про</h3>
           </div>
-          <div class="plan-price gold-price">800&#x20BD;<span>/мес</span></div>
+          <div class="plan-price gold-price">490&#x20BD;<span>/мес</span></div>
         </div>
         <ul class="plan-list">
-          <li>Безлимит рецептов</li>
-          <li>Голосовое управление</li>
-          <li>Приоритетная генерация</li>
-          <li>&#x1F6D2; Список покупок</li>
-          <li>&#x1F4D6; История рецептов</li>
-          <li>&#x23F1; Таймер в рецепте</li>
+          <li>Всё из тарифа «Стандарт»</li>
+          <li class="new-feat">&#x1F379; Рецепты напитков</li>
           <li>&#x1F957; ИИ&#x2011;диетолог</li>
           <li>&#x1F4CA; КБЖУ на порцию</li>
           <li>&#x1F4C5; Меню на неделю</li>
-          <li class="new-feat">&#x1F4E4; Поделиться рецептом</li>
+          <li>&#x1F4E4; Поделиться рецептом</li>
         </ul>
-        <button class="primary-btn gold-btn full-btn" onclick="buyPlan('VIP')">Выбрать VIP</button>
+        <button class="primary-btn gold-btn full-btn" onclick="buyPlan('VIP')">Выбрать Про</button>
       </div>
     </div>
   </div>
@@ -536,9 +532,9 @@
         <div class="wm-banner-icon">💎</div>
         <div class="wm-banner-text">
           <b>Бесплатное меню использовано</b>
-          <small>Оформи VIP для безлимитной генерации меню каждую неделю</small>
+          <small>Оформи «Про» для безлимитной генерации меню каждую неделю</small>
         </div>
-        <button class="wm-banner-btn" onclick="showScreen('subscription')">VIP</button>
+        <button class="wm-banner-btn" onclick="showScreen('subscription')">Про</button>
       </div>
 
       <!-- Форма генерации -->
@@ -715,14 +711,14 @@
         <span>&#x1F6E1;&#xFE0F; Мои аллергии</span><span class="nav-arrow">&#x203A;</span>
       </button>
       <button class="menu-item" onclick="showModeEditor()">
-        <span id="mode-menu-text">&#x1F3AF; Режим: Обычный <span class="vip-badge">VIP</span></span><span class="nav-arrow">&#x203A;</span>
+        <span id="mode-menu-text">&#x1F3AF; Режим: Обычный <span class="vip-badge">Про</span></span><span class="nav-arrow">&#x203A;</span>
       </button>
       <button class="menu-item" onclick="showReminderEditor()">
         <span id="reminder-menu-text">&#x1F514; Напоминания: вкл</span><span class="nav-arrow">&#x203A;</span>
       </button>
     </div>
 
-    <div class="section-label">VIP функции</div>
+    <div class="section-label">Функции «Про»</div>
     <div class="menu-list">
       <button class="menu-item" onclick="showScreen('weekmenu')">
         <span>&#x1F4C5; Меню на неделю <span class="gift-badge" id="weekmenu-gift-badge" style="display:none;">подарок 🎁</span></span><span class="nav-arrow">&#x203A;</span>

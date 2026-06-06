@@ -13,6 +13,8 @@ const { Telegraf } = require('telegraf');
 const cron = require('node-cron');
 const { Pool } = require('pg');
 // ===== КОНФИГ =====
+// Отображаемые названия тарифов (внутренние коды PRO/VIP не меняем)
+const PLAN_NAMES = { FREE: 'Бесплатно', PRO: 'Стандарт', VIP: 'Про' };
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = parseInt(process.env.ADMIN_ID) || 0;
 const PORT = parseInt(process.env.PORT) || 3000;
@@ -275,7 +277,7 @@ async function start() {
       for (const s of rows) {
         const days = Math.ceil((new Date(s.expires_at) - new Date()) / 86400000);
         await bot.telegram.sendMessage(s.tg_id,
-          `⏰ <b>Подписка ${s.plan_type} истекает через ${days} д.</b>`,
+          `⏰ <b>Подписка «${PLAN_NAMES[s.plan_type] || s.plan_type}» истекает через ${days} д.</b>`,
           { parse_mode: 'HTML' }
         ).catch(() => {});
       }

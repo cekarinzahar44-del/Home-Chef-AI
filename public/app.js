@@ -409,6 +409,10 @@ function esc(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// Отображаемые названия тарифов (внутренние коды PRO/VIP не меняем)
+const PLAN_NAMES = { FREE: 'FREE', PRO: 'Стандарт', VIP: 'Про' };
+function planLabel(code) { return PLAN_NAMES[code] || code; }
+
 // ============================================================
 //  WEEK MENU
 // ============================================================
@@ -785,7 +789,7 @@ async function init() {
     const freeCount = $('free-count');
     if (status.subscription) {
       const pt = status.subscription.plan_type;
-      if (badge) { badge.textContent = pt; badge.className = `badge badge-${pt.toLowerCase()}`; }
+      if (badge) { badge.textContent = planLabel(pt); badge.className = `badge badge-${pt.toLowerCase()}`; }
       if (freeCount) freeCount.textContent = '✨ Безлимит активен';
     } else {
       if (badge) { badge.textContent = 'FREE'; badge.className = 'badge'; }
@@ -888,7 +892,7 @@ window.saveAllergiesFromModal = async function() {
 window.showModeEditor = function() {
   const isVIP = window._userPlan === 'VIP';
   if (!isVIP) {
-    toast('🔒 Режимы доступны только для VIP', 'error');
+    toast('🔒 Режимы доступны только в тарифе «Про»', 'error');
     setTimeout(() => showScreen('subscription'), 800);
     return;
   }
@@ -1046,7 +1050,7 @@ function updateModeMenuText() {
   const mode = window._userMode || 'standard';
   const modeNames = { standard: 'Обычный', family: 'Семья', fitness: 'Фитнес' };
   const isVIP = window._userPlan === 'VIP';
-  el.innerHTML = `🎯 Режим: ${modeNames[mode]}${isVIP ? '' : ' <span class="vip-badge">VIP</span>'}`;
+  el.innerHTML = `🎯 Режим: ${modeNames[mode]}${isVIP ? '' : ' <span class="vip-badge">Про</span>'}`;
 }
 
 // ============================================================
@@ -1193,10 +1197,17 @@ $('btn-generate').addEventListener('click', async () => {
     showScreen('recipe');
     hapticNotify('success');
   } catch (e) {
-    if (e.message.includes('limit_reached') || e.message.includes('лимит')) {
+    const msg = e.message || '';
+    if (msg.includes('not_food')) {
+      toast('Я помогаю только с рецептами, переформулируйте запрос', 'error', 4000);
+      showScreen('details');
+    } else if (msg.includes('drinks_pro_only')) {
+      toast('🍹 Рецепты напитков доступны в тарифе «Про»', 'error', 3500);
+      showScreen('subscription');
+    } else if (msg.includes('limit_reached') || msg.includes('лимит')) {
       showScreen('subscription');
     } else {
-      toast('Ошибка: ' + e.message, 'error');
+      toast('Ошибка: ' + msg, 'error');
       showScreen('details');
     }
   }
@@ -1876,7 +1887,7 @@ async function loadProfile() {
     $('profile-username').textContent = data.user?.username ? '@' + data.user.username : '';
     $('stat-recipes').textContent     = data.user?.free_recipes_used || 0;
     const plan = data.subscription?.plan_type || 'FREE';
-    $('stat-plan').textContent = plan;
+    $('stat-plan').textContent = planLabel(plan);
     $('stat-expires').textContent = data.subscription
       ? new Date(data.subscription.expires_at).toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'2-digit' })
       : '—';
