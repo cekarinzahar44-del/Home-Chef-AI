@@ -49,7 +49,7 @@ const aiLimiter = createRateLimiter({
 const AI_PATHS = new Set([
   '/recipe/generate', '/vip/weekmenu', '/vip/diet',
   '/recipe/shopping-list', '/vip/weekmenu-shopping', '/stt/recognize',
-  '/recipe/substitute'
+  '/recipe/substitute', '/recipe/suggest'
 ]);
 router.use((req, res, next) => {
   if (process.env.RATE_LIMIT_ENABLED === 'false') return next();
@@ -318,6 +318,12 @@ router.get('/recipe/status', async (req, res) => {
       [tgId]
     );
     const { rows: [user] } = await global.pool.query(`SELECT * FROM users WHERE tg_id=$1`, [tgId]);
+    // Сколько блюд приготовлено всего — для достижений и личности шефа
+    let recipesTotal = 0;
+    try {
+      const { rows: [c] } = await global.pool.query(`SELECT COUNT(*)::int AS n FROM recipes WHERE user_id=$1`, [tgId]);
+      recipesTotal = c?.n || 0;
+    } catch {}
     res.json({
       subscription: sub || null,
       freeUsed: user?.free_recipes_used || 0,
@@ -333,6 +339,7 @@ router.get('/recipe/status', async (req, res) => {
       fitnessGoal: user?.fitness_goal || null,
       dailyCalories: user?.daily_calories || null,
       dailyReminder: user?.daily_reminder !== false,
+      recipesTotal,
       prices: { PRO: PRO_PRICE, VIP: VIP_PRICE }
     });
   } catch (e) {
@@ -498,6 +505,26 @@ router.get('/recipes/list', async (req, res) => {
   }
 });
 
+// ===== РЕКОМЕНДАЦИИ «ТВОИ ХИТЫ» (профиль вкуса, без ИИ) =====
+// Должен идти ДО /recipes/:id, иначе "recommendations" попадёт в :id
+router.get('/recipes/recommendations', async (req, res) => {
+  try {
+    const tgId = req.telegramUser.id;
+    // Любимые и высоко оценённые блюда — для повтора в один тап
+    const { rows } = await global.pool.query(
+      `SELECT id, title, rating, cooked_count, is_favorite
+       FROM recipes
+       WHERE user_id=$1 AND (is_favorite=TRUE OR rating>=4 OR cooked_count>0)
+       ORDER BY is_favorite DESC, COALESCE(rating,0) DESC, cooked_count DESC, created_at DESC
+       LIMIT 6`,
+      [tgId]
+    );
+    res.json({ recipes: rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ===== ПОЛУЧИТЬ ОДИН РЕЦЕПТ =====
 router.get('/recipes/:id', async (req, res) => {
   try {
@@ -519,8 +546,27 @@ router.get('/recipes/:id', async (req, res) => {
       total: steps.length,
       isFavorite: r.is_favorite,
       rating: r.rating,
+      notes: r.notes || '',
       cookedCount: r.cooked_count
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===== ЗАМЕТКА К РЕЦЕПТУ (профиль вкуса) =====
+router.post('/recipes/:id/note', async (req, res) => {
+  try {
+    const tgId = req.telegramUser.id;
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ error: 'bad id' });
+    const notes = String(req.body.notes || '').slice(0, 500).trim();
+    const { rows: [updated] } = await global.pool.query(
+      `UPDATE recipes SET notes=$1 WHERE id=$2 AND user_id=$3 RETURNING notes`,
+      [notes, id, tgId]
+    );
+    if (!updated) return res.status(404).json({ error: 'not found' });
+    res.json({ ok: true, notes: updated.notes });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1079,6 +1125,71 @@ ${allergyBlock(userPrefs.allergies)}
   } catch (e) {
     console.error('Substitute error:', e);
     global.recordError?.('Замена ингредиента', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===== «ЧТО ПРИГОТОВИТЬ?» — персональная подсказка по вкусу (дешёвый ИИ) =====
+router.post('/recipe/suggest', async (req, res) => {
+  try {
+    const tgId = req.telegramUser.id;
+    const moods = {
+      fast: 'быстро (до 20 минут)',
+      hearty: 'сытно и питательно',
+      light: 'лёгкое и полезное',
+      surprise: 'удиви меня чем-то необычным'
+    };
+    const mood = moods[req.body.mood] || '';
+
+    const prefs = await getUserPrefs(tgId);
+    // Профиль вкуса: что пользователь высоко оценил / часто готовил
+    let liked = [];
+    try {
+      const { rows } = await global.pool.query(
+        `SELECT title FROM recipes WHERE user_id=$1 AND (is_favorite=TRUE OR rating>=4)
+         ORDER BY COALESCE(rating,0) DESC, cooked_count DESC, created_at DESC LIMIT 8`,
+        [tgId]
+      );
+      liked = rows.map(r => r.title).filter(Boolean);
+    } catch {}
+
+    const tasteBlock = liked.length ? `Пользователю раньше понравились: ${liked.join(', ')}. Учитывай его вкус, но НЕ повторяй эти же блюда — предложи новое в похожем духе.` : 'История вкуса пока пустая — предложи популярные универсальные блюда.';
+    const favBlock = prefs.favorites ? `Любит продукты: ${prefs.favorites}.` : '';
+    const dislikeBlock = prefs.disliked ? `Не любит: ${prefs.disliked}.` : '';
+
+    const system = `Ты — шеф-повар. Предложи РОВНО 3 идеи, что приготовить, под вкус и запрос пользователя.
+${allergyBlock(prefs.allergies)}
+Только домашние блюда из продуктов обычного супермаркета.
+Формат ответа СТРОГО (без вступлений, без нумерации лишним текстом):
+1. [Название блюда] — [почему подойдёт, одна короткая фраза]
+2. [Название блюда] — [...]
+3. [Название блюда] — [...]
+Названия — простые и понятные. Без HTML и markdown-звёздочек.`;
+
+    const user = `${tasteBlock} ${favBlock} ${dislikeBlock}
+${mood ? `Сейчас хочется: ${mood}.` : ''}
+Предложи 3 идеи на сегодня.`;
+
+    const raw = await callGigaChat(system, user, 350, 0.85);
+    // Парсим строки вида "1. Блюдо — описание"
+    const ideas = String(raw).split('\n')
+      .map(l => l.trim())
+      .filter(l => /^\d+[.)]/.test(l))
+      .map(l => {
+        const clean = l.replace(/^\d+[.)]\s*/, '').replace(/<[^>]+>/g, '').replace(/\*+/g, '');
+        const sep = clean.search(/\s[—–-]\s/);
+        const dish = (sep > 0 ? clean.slice(0, sep) : clean).trim();
+        const reason = sep > 0 ? clean.slice(sep).replace(/^\s*[—–-]\s*/, '').trim() : '';
+        return { dish: dish.slice(0, 60), reason: reason.slice(0, 120) };
+      })
+      .filter(i => i.dish.length > 1)
+      .slice(0, 3);
+
+    if (!ideas.length) return res.json({ ideas: [{ dish: raw.slice(0, 60).trim(), reason: '' }] });
+    res.json({ ideas });
+  } catch (e) {
+    console.error('Suggest error:', e);
+    global.recordError?.('Что приготовить', e.message);
     res.status(500).json({ error: e.message });
   }
 });

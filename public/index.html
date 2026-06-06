@@ -190,6 +190,20 @@
       </div>
     </div>
 
+    <button id="btn-suggest" class="suggest-btn" onclick="showSuggest()">
+      <span class="suggest-emoji">&#x1F914;</span>
+      <span class="suggest-text">
+        <b>Что приготовить сегодня?</b>
+        <small>Шеф подберёт под твой вкус</small>
+      </span>
+      <span class="suggest-arrow">&#x203A;</span>
+    </button>
+
+    <div id="home-hits" class="hits-wrap" style="display:none;">
+      <div class="section-label">&#x2B50; Твои хиты</div>
+      <div id="hits-list" class="hits-list"></div>
+    </div>
+
     <div class="section-label">Быстрый выбор</div>
     <div class="chips-row">
       <button class="chip" data-dish="Борщ"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h18M5 10v6a4 4 0 0 0 4 4h6a4 4 0 0 0 4-4v-6M8 6c0-1 1-2 0-3M12 6c0-1 1-2 0-3M16 6c0-1 1-2 0-3"/></svg> Борщ</button>
@@ -363,6 +377,14 @@
         <span class="extra-info">
           <b>Чем заменить?</b>
           <small>Нет продукта — шеф подберёт замену</small>
+        </span>
+        <span class="extra-arrow">&#x203A;</span>
+      </button>
+      <button id="btn-note" class="extra-btn" onclick="showNote()">
+        <span class="extra-icon">&#x1F4DD;</span>
+        <span class="extra-info">
+          <b>Моя заметка</b>
+          <small>«В этот раз меньше соли» — подставится при повторе</small>
         </span>
         <span class="extra-arrow">&#x203A;</span>
       </button>

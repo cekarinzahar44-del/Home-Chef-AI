@@ -76,6 +76,13 @@ const API = {
   substitute: (ingredient, dish) => API.request('/api/recipe/substitute', {
     method: 'POST', body: JSON.stringify({ ingredient, dish })
   }),
+  suggest: (mood) => API.request('/api/recipe/suggest', {
+    method: 'POST', body: JSON.stringify({ mood })
+  }),
+  getRecommendations: () => API.request('/api/recipes/recommendations'),
+  saveNote: (id, notes) => API.request(`/api/recipes/${id}/note`, {
+    method: 'POST', body: JSON.stringify({ notes })
+  }),
   getShoppingList: (recipe) => API.request('/api/recipe/shopping-list', {
     method: 'POST', body: JSON.stringify({ recipe })
   }),
@@ -381,7 +388,8 @@ const RecipeManager = {
       if (this.current?.id) {
         showRatingModal();
       } else {
-        toast('🎉 Блюдо готово! Приятного аппетита!', 'success', 4000);
+        const cheer = chefCheer();
+        toast(`${cheer.emoji} ${cheer.text}`, 'success', 4000);
         showScreen('home');
       }
     }
@@ -569,6 +577,7 @@ function showScreen(name) {
   if (name === 'recipe') WakeLock.acquire(); else WakeLock.release();
 
   // Действия при открытии экранов
+  if (name === 'home') loadHomeHits();
   if (name === 'profile') loadProfile();
   if (name === 'weekmenu') {
     // Баннеры в зависимости от статуса
@@ -770,6 +779,7 @@ async function init() {
     window._userFitnessGoal = status.fitnessGoal || null;
     window._userDailyCalories = status.dailyCalories || null;
     window._userReminder = status.dailyReminder !== false;
+    window._recipesTotal = status.recipesTotal || 0;
 
     const badge = $('user-badge');
     const freeCount = $('free-count');
@@ -1336,6 +1346,147 @@ window.showSubstitute = function() {
   });
 };
 
+// ============================================================
+//  ПРОФИЛЬ ВКУСА: «Твои хиты» + заметки
+// ============================================================
+
+// «Твои хиты» на главном — любимые/высоко оценённые блюда (без ИИ)
+async function loadHomeHits() {
+  const wrap = $('home-hits');
+  const list = $('hits-list');
+  if (!wrap || !list) return;
+  try {
+    const data = await API.getRecommendations();
+    const hits = data.recipes || [];
+    if (!hits.length) { wrap.style.display = 'none'; return; }
+    list.innerHTML = hits.map(r => {
+      const title = (r.title || 'Рецепт').replace(/<[^>]+>/g, '');
+      const star = r.rating ? `${r.rating}★` : (r.is_favorite ? '❤️' : '🍽');
+      return `<button class="hit-card" onclick="openSavedRecipe(${r.id})">
+          <span class="hit-badge">${star}</span>
+          <span class="hit-title">${esc(title)}</span>
+        </button>`;
+    }).join('');
+    wrap.style.display = 'block';
+  } catch {
+    wrap.style.display = 'none';
+  }
+}
+
+// Открыть сохранённый рецепт (повтор любимого в один тап)
+window.openSavedRecipe = async function(id) {
+  try {
+    showScreen('loading');
+    const recipe = await RecipeStore.get(id);
+    RecipeManager.load(recipe);
+    showScreen('recipe');
+    hapticNotify('success');
+  } catch (e) {
+    toast('Не удалось открыть рецепт', 'error');
+    showScreen('home');
+  }
+};
+
+// Личная заметка к рецепту
+window.showNote = function() {
+  if (!RecipeManager.current?.id) {
+    toast('Заметку можно добавить к сохранённому рецепту', 'error');
+    return;
+  }
+  const current = RecipeManager.current.notes || '';
+  const old = document.getElementById('note-modal'); if (old) old.remove();
+  const modal = document.createElement('div');
+  modal.id = 'note-modal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>📝 Моя заметка</h3>
+        <button class="modal-close" onclick="document.getElementById('note-modal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="cook-hint">Запиши, что изменить в следующий раз — заметка сохранится у этого рецепта.</p>
+        <textarea id="note-input" class="sub-text-input" rows="3" placeholder="Например: соли меньше, добавить чеснок, готовил на 4 порции">${esc(current)}</textarea>
+        <button id="note-save" class="primary-btn full-btn" style="margin-top:10px;">💾 Сохранить</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  $('note-save').addEventListener('click', async () => {
+    const notes = $('note-input').value.trim();
+    try {
+      await API.saveNote(RecipeManager.current.id, notes);
+      RecipeManager.current.notes = notes;
+      toast('💾 Заметка сохранена');
+      hapticNotify('success');
+      modal.remove();
+    } catch (e) {
+      toast('Ошибка: ' + e.message, 'error');
+    }
+  });
+};
+
+// ============================================================
+//  «ЧТО ПРИГОТОВИТЬ?» — персональная подсказка
+// ============================================================
+window.showSuggest = function() {
+  const old = document.getElementById('suggest-modal'); if (old) old.remove();
+  const modal = document.createElement('div');
+  modal.id = 'suggest-modal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>🤔 Что приготовить?</h3>
+        <button class="modal-close" onclick="document.getElementById('suggest-modal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="cook-hint">Какое настроение сегодня?</p>
+        <div class="sub-chips">
+          <button class="sub-chip" data-mood="">✨ Любое</button>
+          <button class="sub-chip" data-mood="fast">⚡ Быстро</button>
+          <button class="sub-chip" data-mood="hearty">🍖 Сытно</button>
+          <button class="sub-chip" data-mood="light">🥗 Лёгкое</button>
+          <button class="sub-chip" data-mood="surprise">🎲 Удиви</button>
+        </div>
+        <div id="suggest-result" class="suggest-result"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  modal.querySelectorAll('.sub-chip').forEach(c =>
+    c.addEventListener('click', () => runSuggest(c.dataset.mood)));
+};
+
+async function runSuggest(mood) {
+  const box = $('suggest-result');
+  if (!box) return;
+  box.innerHTML = '<p class="cook-hint">⏳ Шеф думает…</p>';
+  haptic('light');
+  try {
+    const data = await API.suggest(mood || '');
+    const ideas = data.ideas || [];
+    if (!ideas.length) { box.innerHTML = '<p class="cook-hint">Не удалось подобрать. Попробуй ещё раз.</p>'; return; }
+    box.innerHTML = ideas.map(i => `
+      <button class="suggest-idea" onclick="cookSuggested(${JSON.stringify(i.dish).replace(/"/g,'&quot;')})">
+        <span class="suggest-idea-title">🍽 ${esc(i.dish)}</span>
+        ${i.reason ? `<span class="suggest-idea-reason">${esc(i.reason)}</span>` : ''}
+      </button>`).join('');
+    hapticNotify('success');
+  } catch (e) {
+    box.innerHTML = `<p class="cook-hint">Ошибка: ${esc(e.message)}</p>`;
+  }
+}
+
+// Выбрал идею → переходим к деталям и генерации
+window.cookSuggested = function(dish) {
+  document.getElementById('suggest-modal')?.remove();
+  state.ingredients = dish;
+  const inp = $('dish-input');
+  if (inp) inp.value = dish;
+  showScreen('details');
+};
+
 // Голосовая навигация — единый toggle
 $('btn-voice-nav')?.addEventListener('click', () => {
   VoiceNav.toggle();
@@ -1599,19 +1750,36 @@ window.toggleFavorite = async function() {
 };
 
 // Модалка рейтинга — показывается при нажатии "Готово!"
+// Тёплое поздравление от шефа с учётом количества приготовленных блюд
+function chefCheer() {
+  const n = (window._recipesTotal || 0);
+  if (n > 0 && n % 25 === 0) return { emoji: '🏆', text: `Вот это да — уже ${n}-е блюдо! Ты настоящий шеф 👨‍🍳` };
+  if (n > 0 && n % 10 === 0) return { emoji: '🎖', text: `Уже ${n} блюд приготовлено! Так держать 👏` };
+  if (n === 1) return { emoji: '🎉', text: 'Твоё первое блюдо готово! Поздравляю 🥳' };
+  if (n === 5) return { emoji: '⭐', text: 'Уже 5 блюд! Кухня тебе покоряется 😉' };
+  const phrases = [
+    'Блюдо готово! Приятного аппетита 😋',
+    'Готово! Пахнет потрясающе, наверное 🤤',
+    'Шедевр готов! Ты молодец 👏',
+    'Готово! Надеюсь, было вкусно 🍽'
+  ];
+  return { emoji: '🎉', text: phrases[Math.floor(Math.random() * phrases.length)] };
+}
+
 function showRatingModal() {
   if (!RecipeManager.current?.id) return;
   const existing = $('rating-modal');
   if (existing) existing.remove();
 
+  const cheer = chefCheer();
   const modal = document.createElement('div');
   modal.id = 'rating-modal';
   modal.className = 'modal-overlay';
   modal.innerHTML = `
     <div class="modal-box rating-box">
       <div style="text-align:center;padding:8px 0;">
-        <div style="font-size:48px;line-height:1;margin-bottom:10px;">🎉</div>
-        <h3 style="margin:0 0 6px;font-size:20px;">Блюдо готово!</h3>
+        <div style="font-size:48px;line-height:1;margin-bottom:10px;">${cheer.emoji}</div>
+        <h3 style="margin:0 0 6px;font-size:20px;">${cheer.text}</h3>
         <p style="margin:0 0 18px;color:var(--text-muted);font-size:14px;">Как тебе рецепт?</p>
         <div class="rating-stars">
           ${[1,2,3,4,5].map(n => `<button class="rating-star" data-val="${n}">★</button>`).join('')}
@@ -1637,9 +1805,16 @@ function showRatingModal() {
         await RecipeStore.rate(RecipeManager.current.id, rating);
         RecipeManager.current.rating = rating;
         hapticNotify('success');
+        const reactions = {
+          5: '🔥 Шикарно! Запомню, что тебе это зашло',
+          4: '😋 Отлично! Добавлю в твои хиты',
+          3: '🙂 Спасибо! Учту твой вкус',
+          2: 'Понял, в следующий раз подберу лучше 💪',
+          1: 'Жаль 😔 Учту это и подберу повкуснее'
+        };
         setTimeout(() => {
           closeRatingModal();
-          toast(rating >= 4 ? '⭐ Отлично! Рейтинг сохранён' : 'Спасибо за оценку!');
+          toast(reactions[rating] || 'Спасибо за оценку!');
           showScreen('home');
         }, 600);
       } catch (e) {

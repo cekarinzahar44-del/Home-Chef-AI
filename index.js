@@ -241,6 +241,8 @@ async function start() {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes(user_id, created_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_recipes_fav ON recipes(user_id, is_favorite) WHERE is_favorite=TRUE`,
+    // Личные заметки к рецепту («в этот раз меньше соли») — профиль вкуса
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='recipes' AND column_name='notes') THEN ALTER TABLE recipes ADD COLUMN notes TEXT DEFAULT ''; END IF; END $$;`,
 
     // История блюд из меню на неделю — чтобы не повторялись
     `CREATE TABLE IF NOT EXISTS weekmenu_dishes (

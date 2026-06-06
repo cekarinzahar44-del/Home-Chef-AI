@@ -3000,3 +3000,49 @@ textarea::placeholder, input::placeholder { color: var(--text-muted); font-weigh
   margin-top: 14px; padding: 14px; border-radius: var(--r-md);
   background: var(--accent-dim); border: 1px solid var(--border-acc);
 }
+
+/* ====== «ЧТО ПРИГОТОВИТЬ?» + «ТВОИ ХИТЫ» ====== */
+.suggest-btn {
+  display: flex; align-items: center; gap: 12px;
+  width: calc(100% - 32px); margin: 0 16px 18px;
+  background: var(--surface); border: 1.5px solid var(--border-acc);
+  border-radius: var(--r-lg); padding: 14px 16px;
+  cursor: pointer; text-align: left; transition: all 0.2s;
+}
+.suggest-btn:active { transform: scale(0.99); background: var(--accent-dim); }
+.suggest-emoji { font-size: 26px; flex-shrink: 0; }
+.suggest-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.suggest-text b { font-size: 15px; color: var(--text-1); font-weight: 700; }
+.suggest-text small { font-size: 12.5px; color: var(--text-2); }
+.suggest-arrow { color: var(--accent); font-size: 22px; flex-shrink: 0; }
+
+.hits-wrap { margin-bottom: 6px; }
+.hits-list {
+  display: flex; gap: 9px; overflow-x: auto; padding: 2px 16px 8px;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.hits-list::-webkit-scrollbar { display: none; }
+.hit-card {
+  flex: 0 0 auto; max-width: 160px;
+  display: flex; flex-direction: column; gap: 6px;
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: var(--r-md); padding: 11px 13px; cursor: pointer;
+  transition: all 0.2s; text-align: left;
+}
+.hit-card:active { transform: scale(0.97); border-color: var(--border-acc); }
+.hit-badge { font-size: 13px; font-weight: 700; color: var(--accent); }
+.hit-title {
+  font-size: 13px; font-weight: 600; color: var(--text-1); line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+.suggest-result:not(:empty) { margin-top: 14px; display: flex; flex-direction: column; gap: 9px; }
+.suggest-idea {
+  display: flex; flex-direction: column; gap: 3px;
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: var(--r-md); padding: 13px 15px; cursor: pointer;
+  text-align: left; transition: all 0.2s;
+}
+.suggest-idea:active { transform: scale(0.99); background: var(--accent-dim); border-color: var(--border-acc); }
+.suggest-idea-title { font-size: 15px; font-weight: 700; color: var(--text-1); }
+.suggest-idea-reason { font-size: 12.5px; color: var(--text-2); line-height: 1.4; }
