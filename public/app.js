@@ -64,14 +64,17 @@ const API = {
   getStatus:       ()       => API.request('/api/recipe/status'),
   getFullProfile:  ()       => API.request('/api/user/fullprofile'),
   getPaymentInfo:  ()       => API.request('/api/payment/info'),
-  generateRecipe:  (ingredients, details) => API.request('/api/recipe/generate', {
-    method: 'POST', body: JSON.stringify({ ingredients, details })
+  generateRecipe:  (ingredients, details, portions, cookware) => API.request('/api/recipe/generate', {
+    method: 'POST', body: JSON.stringify({ ingredients, details, portions, cookware })
   }),
   generateWeekMenu: (prefs, level, portions) => API.request('/api/vip/weekmenu', {
     method: 'POST', body: JSON.stringify({ prefs, level, portions })
   }),
   askDiet: (question) => API.request('/api/vip/diet', {
     method: 'POST', body: JSON.stringify({ question })
+  }),
+  substitute: (ingredient, dish) => API.request('/api/recipe/substitute', {
+    method: 'POST', body: JSON.stringify({ ingredient, dish })
   }),
   getShoppingList: (recipe) => API.request('/api/recipe/shopping-list', {
     method: 'POST', body: JSON.stringify({ recipe })
@@ -203,6 +206,28 @@ window.RecipeStore = RecipeStore;
 //  STEP TIMER
 // ============================================================
 
+// Не давать экрану гаснуть, пока человек готовит по рецепту
+const WakeLock = {
+  _lock: null,
+  async acquire() {
+    try {
+      if ('wakeLock' in navigator && !this._lock) {
+        this._lock = await navigator.wakeLock.request('screen');
+        this._lock.addEventListener('release', () => { this._lock = null; });
+      }
+    } catch {}
+  },
+  async release() {
+    try { await this._lock?.release(); } catch {}
+    this._lock = null;
+  }
+};
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && document.querySelector('#screen-recipe.active')) {
+    WakeLock.acquire();
+  }
+});
+
 const StepTimer = {
   _interval: null,
   _seconds: 0,
@@ -231,7 +256,30 @@ const StepTimer = {
     const disp = $('step-timer-display');
     const btn  = $('btn-step-timer');
     if (disp) disp.textContent = `${m}:${s}`;
-    if (btn)  btn.textContent = this.running ? '⏹ Стоп' : '▶ Старт';
+    if (btn) {
+      if (this.running) btn.textContent = '⏹ Стоп';
+      else {
+        const d = this._detectSeconds($('step-text')?.textContent || '');
+        btn.textContent = d ? `▶ ${this._fmt(d)}` : '▶ Старт';
+      }
+    }
+  },
+
+  // Достаём время из текста шага: «1 час», «7 мин», «30 сек» (можно вместе)
+  _detectSeconds(text) {
+    const t = (text || '').toLowerCase();
+    const h = t.match(/(\d+)\s*(?:час|ч\b)/);
+    const m = t.match(/(\d+)\s*мин/);
+    const s = t.match(/(\d+)\s*(?:секунд|сек\b|с\b)/);
+    let total = 0;
+    if (h) total += parseInt(h[1]) * 3600;
+    if (m) total += parseInt(m[1]) * 60;
+    if (s && !h && !m) total += parseInt(s[1]);
+    return total;
+  },
+  _fmt(secs) {
+    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+    return [h ? `${h} ч` : '', m ? `${m} мин` : '', (s && !h) ? `${s} с` : ''].filter(Boolean).join(' ') || '0 с';
   },
 
   _onDone() {
@@ -244,13 +292,17 @@ const StepTimer = {
     const plan = window._userPlan || 'FREE';
     if (plan === 'FREE') { showScreen('subscription'); return; }
     if (this.running) { this.stop(); return; }
-    // Пытаемся вытащить время из текста текущего шага
-    const stepText = $('step-text')?.textContent || '';
-    const mins = stepText.match(/(\d+)\s*мин/i);
-    const defaultMins = mins ? parseInt(mins[1]) : 5;
-    const input = prompt(`Сколько минут таймер? (по умолчанию ${defaultMins})`, defaultMins);
-    const parsed = parseInt(input);
-    if (!isNaN(parsed) && parsed > 0) this.start(parsed * 60);
+    // Один тап: берём время прямо из шага
+    const secs = this._detectSeconds($('step-text')?.textContent || '');
+    if (secs) {
+      this.start(secs);
+      toast(`⏱ Таймер на ${this._fmt(secs)} запущен`);
+      haptic('medium');
+    } else {
+      const input = prompt('Сколько минут таймер?', 5);
+      const parsed = parseInt(input);
+      if (!isNaN(parsed) && parsed > 0) this.start(parsed * 60);
+    }
   }
 };
 
@@ -503,7 +555,7 @@ const WeekMenu = {
 //  НАВИГАЦИЯ МЕЖДУ ЭКРАНАМИ
 // ============================================================
 
-const state = { ingredients: '', prefs: [], planToBuy: null };
+const state = { ingredients: '', prefs: [], planToBuy: null, cookware: 'auto' };
 
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -512,6 +564,9 @@ function showScreen(name) {
   screen.classList.add('active');
   haptic('light');
   window.scrollTo(0, 0);
+
+  // Не гасим экран во время готовки
+  if (name === 'recipe') WakeLock.acquire(); else WakeLock.release();
 
   // Действия при открытии экранов
   if (name === 'profile') loadProfile();
@@ -1064,6 +1119,24 @@ document.querySelectorAll('.pref').forEach(p => {
   });
 });
 
+// Выбор посуды — одиночный (по умолчанию «Подобрать»)
+document.querySelectorAll('.cookware-chip').forEach(c => {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('.cookware-chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    state.cookware = c.dataset.pot;
+    haptic('light');
+  });
+});
+document.querySelector('.cookware-chip[data-pot="auto"]')?.classList.add('active');
+
+// Подсказка «не знаю объём» — раскрывает короткий помощник
+$('pot-help-btn')?.addEventListener('click', () => {
+  const h = $('pot-help');
+  if (h) h.hidden = !h.hidden;
+  haptic('light');
+});
+
 $('btn-send').addEventListener('click', () => {
   const val = $('dish-input').value.trim();
   if (!val) { hapticNotify('error'); toast('Введи название блюда', 'error'); return; }
@@ -1093,8 +1166,10 @@ $('btn-generate').addEventListener('click', async () => {
   const portions = $('portions').value;
   const extra = $('extra-details').value.trim();
   const prefs = state.prefs.join(', ');
+  const cookware = state.cookware && state.cookware !== 'auto' ? state.cookware : '';
   const details = [
     portions > 1 ? `${portions} порции` : '1 порция',
+    cookware ? `посуда: ${cookware}` : '',
     prefs,
     extra
   ].filter(Boolean).join('. ');
@@ -1103,7 +1178,7 @@ $('btn-generate').addEventListener('click', async () => {
   haptic('medium');
 
   try {
-    const recipe = await API.generateRecipe(state.ingredients, details);
+    const recipe = await API.generateRecipe(state.ingredients, details, portions, cookware);
     RecipeManager.load(recipe);
     showScreen('recipe');
     hapticNotify('success');
@@ -1155,6 +1230,110 @@ window.copyFullRecipe = async function(title, text) {
     await navigator.clipboard.writeText(`${title}\n\n${text}`);
     toast('📋 Рецепт скопирован!');
   } catch { toast('Не удалось скопировать', 'error'); }
+};
+
+// Локальный (без ИИ) парсинг ингредиентов из текста рецепта
+function parseIngredients(fullText) {
+  if (!fullText) return [];
+  const text = String(fullText).replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  const m = text.match(/ИНГРЕДИЕНТ[^\n]*\n([\s\S]*?)(?:\n\s*(?:🔥|👨‍🍳|🍲|💧|🌡|💡|🍷|📊|МЕТОД|ПОШАГ|ПРИГОТОВ|СОВЕТ|ПОДАЧА)|$)/i);
+  if (!m) return [];
+  return m[1].split('\n')
+    .map(l => l.replace(/^[\s—–\-•*]+/, '').trim())
+    .filter(l => l.length > 1 && /[а-яё]/i.test(l))
+    .slice(0, 40);
+}
+
+// Мгновенный чек-лист «что добавить» — отмечаем прямо во время готовки
+window.showIngredientChecklist = function() {
+  if (!RecipeManager.current) { toast('Сначала открой рецепт', 'error'); return; }
+  const items = parseIngredients(RecipeManager.current.fullText || (RecipeManager.current.steps || []).join('\n'));
+  if (!items.length) { toast('Не удалось найти список ингредиентов', 'error'); return; }
+  RecipeManager.current._checked = RecipeManager.current._checked || {};
+  const checked = RecipeManager.current._checked;
+
+  const old = document.getElementById('ingredients-modal'); if (old) old.remove();
+  const modal = document.createElement('div');
+  modal.id = 'ingredients-modal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>🧾 Ингредиенты</h3>
+        <button class="modal-close" onclick="document.getElementById('ingredients-modal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="cook-hint">Отмечай, что уже добавил 👇</p>
+        <div class="cook-checklist">
+          ${items.map((it, i) => `
+            <label class="cook-check ${checked[i] ? 'done' : ''}">
+              <input type="checkbox" data-i="${i}" ${checked[i] ? 'checked' : ''}>
+              <span>${esc(it)}</span>
+            </label>`).join('')}
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  modal.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      checked[cb.dataset.i] = cb.checked;
+      cb.closest('.cook-check').classList.toggle('done', cb.checked);
+      haptic('light');
+    });
+  });
+};
+
+// Замена ингредиента через ИИ
+window.showSubstitute = function() {
+  if (!RecipeManager.current) { toast('Сначала открой рецепт', 'error'); return; }
+  const dish = (RecipeManager.current.title || '').replace(/<[^>]+>/g, '').replace(/^🍽\s*/, '').trim();
+  const ingredients = parseIngredients(RecipeManager.current.fullText || '');
+  const chips = ingredients.slice(0, 12).map(it => {
+    const name = it.split('—')[0].split(':')[0].trim();
+    return `<button type="button" class="sub-chip" data-name="${esc(name)}">${esc(name)}</button>`;
+  }).join('');
+
+  const old = document.getElementById('substitute-modal'); if (old) old.remove();
+  const modal = document.createElement('div');
+  modal.id = 'substitute-modal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>🔄 Чем заменить?</h3>
+        <button class="modal-close" onclick="document.getElementById('substitute-modal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="cook-hint">Нет продукта? Выбери из списка или впиши свой — шеф подскажет замену.</p>
+        ${chips ? `<div class="sub-chips">${chips}</div>` : ''}
+        <input id="sub-input" class="sub-text-input" type="text" placeholder="Например: сметана">
+        <button id="sub-go" class="primary-btn full-btn" style="margin-top:10px;">🔄 Подобрать замену</button>
+        <div id="sub-result" class="sub-result"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  modal.querySelectorAll('.sub-chip').forEach(c =>
+    c.addEventListener('click', () => { $('sub-input').value = c.dataset.name; haptic('light'); }));
+
+  $('sub-go').addEventListener('click', async () => {
+    const ing = $('sub-input').value.trim();
+    if (ing.length < 2) { toast('Впиши продукт', 'error'); return; }
+    const btn = $('sub-go');
+    btn.disabled = true; btn.textContent = '⏳ Думаю…';
+    $('sub-result').innerHTML = '';
+    try {
+      const data = await API.substitute(ing, dish);
+      $('sub-result').innerHTML = `<pre class="modal-text">${esc(data.answer || '')}</pre>`;
+      haptic('medium');
+    } catch (e) {
+      toast('Ошибка: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = '🔄 Подобрать замену';
+    }
+  });
 };
 
 // Голосовая навигация — единый toggle
