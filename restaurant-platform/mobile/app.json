@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Restaurant AI",
+    "slug": "restaurant-ai-platform",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#030712"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.restaurantai.platform",
+      "buildNumber": "1"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#030712"
+      },
+      "package": "com.restaurantai.platform",
+      "versionCode": 1,
+      "permissions": ["RECORD_AUDIO", "INTERNET", "RECEIVE_BOOT_COMPLETED", "VIBRATE"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      ["expo-notifications", {
+        "icon": "./assets/notification-icon.png",
+        "color": "#3B82F6"
+      }]
+    ],
+    "scheme": "restaurant-ai",
+    "extra": {
+      "eas": { "projectId": "your-eas-project-id" }
+    }
+  }
+}
